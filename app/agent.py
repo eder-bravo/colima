@@ -395,9 +395,7 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     if not api_key or len(api_key.strip()) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Use Google AI Studio Gemini 2.0 Flash
-    model_name = "gemini-2.0-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+    CANDIDATE_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key.strip()
@@ -421,7 +419,6 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                 "parts": [{"text": txt}]
             })
 
-    # Ensure starts with user
     while contents and contents[0]["role"] != "user":
         contents.pop(0)
 
@@ -444,13 +441,20 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     executed_tools = []
     tool_results = []
     final_text = ""
-    thinking_text = "Evaluando contexto del sprint y requerimientos..."
+    thinking_text = "Evaluando contexto del sprint con modelo de IA..."
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            res = await client.post(url, headers=headers, json=payload)
-            if res.status_code != 200:
-                print(f"[Gemini 2.0 Flash API Error] Status: {res.status_code}, Body: {res.text}")
+            res = None
+            for model_name in CANDIDATE_MODELS:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                res = await client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    break
+                else:
+                    print(f"[{model_name} failed with {res.status_code}]: {res.text[:150]}")
+
+            if not res or res.status_code != 200:
                 return await run_smart_fallback(workspace_id, user_message, system_instruction)
             
             data = res.json()
@@ -493,6 +497,8 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                     data2 = res2.json()
                     parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                     final_text = "\n".join([p.get("text") for p in parts2 if "text" in p])
+
+
 
     except Exception as exc:
         print(f"[Gemini Exception]: {exc}")
@@ -546,26 +552,50 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
     tool_results = []
     thinking = "Analizando contexto y base de datos del proyecto..."
     
-    # 1. Preguntas sobre trabajadores / equipo
-    if any(k in user_lower for k in ["cuantos trabajadores", "cuántos trabajadores", "quienes trabajan", "quiénes trabajan", "nuestro equipo", "los desarrolladores", "mi equipo", "trabajadores"]):
+    # 0. Preguntas sobre perfiles específicos de trabajadores
+    matched_profile = None
+    for t in talents:
+        first_name = t["name"].split()[0].lower()
+        if len(first_name) > 2 and first_name in user_lower:
+            matched_profile = t
+            break
+    
+    if matched_profile:
+        skills_list = []
+        try:
+            conn_temp = get_db_connection()
+            row = conn_temp.execute("SELECT skills, availability_status FROM talent_profiles WHERE workspace_id = ? AND name = ?;", (workspace_id, matched_profile["name"])).fetchone()
+            conn_temp.close()
+            if row and row["skills"]:
+                skills_list = json.loads(row["skills"])
+        except Exception:
+            pass
+        final_text = f"**{matched_profile['name']}** ({matched_profile['seniority']} {matched_profile['role']}):\n• **Factor Productividad:** {matched_profile['productivity_factor']}x\n• **Stack Principal:** {', '.join(skills_list) if skills_list else 'Fullstack'}\n\n¿Quieres que le asigne tareas o revisemos su carga actual?"
+
+    # 1. Identidad del modelo
+    elif any(k in user_lower for k in ["que modelo", "qué modelo", "cual modelo", "cuál modelo", "gemma", "gemini", "quien eres", "quién eres"]):
+        final_text = "Soy **Hermes PM**, un Asistente Autónomo de Gestión de Equipos de Software impulsado por **Google AI Studio (Gemini Flash)**. Estoy conectado en tiempo real al ATS, Kanban y Calendario del proyecto para asistirte."
+
+    # 2. Preguntas sobre trabajadores / equipo
+    elif any(k in user_lower for k in ["cuantos trabajadores", "cuántos trabajadores", "quienes trabajan", "quiénes trabajan", "nuestro equipo", "los desarrolladores", "mi equipo", "trabajadores"]):
         if not talents:
             final_text = "Actualmente **no tenemos trabajadores** en el equipo. Puedes subir los CVs en la pestaña **Mis Trabajadores** o hacer clic en 'Cargar 5 CVs' para armar el equipo."
         else:
             names = [f"**{t['name']}** ({t['role']})" for t in talents]
             final_text = f"Actualmente contamos con **{len(talents)} trabajadores** en el equipo:\n• " + "\n• ".join(names) + "\n\n¿Quieres que revise su carga de trabajo o les asigne tareas?"
 
-    # 2. Saludos
+    # 3. Saludos
     elif any(k in user_lower for k in ["hola", "buenas", "buenos dias", "buenas tardes", "hey", "como te va", "cómo te va"]):
         t_count = len(talents)
         p_count = len(projects)
         final_text = f"¡Todo excelente por acá! Tenemos {p_count} proyecto(s) y {t_count} trabajadores en el equipo. ¿Revisamos el sprint, planificamos tareas o vemos las sugerencias de mejora?"
 
-    # 3. Definición / Apertura de proyectos
+    # 4. Definición / Apertura de proyectos
     elif any(k in user_lower for k in ["definir proyecto", "nuevo proyecto", "crear proyecto", "aperturar", "iniciar proyecto"]):
         final_text = "¡Perfecto! Como PM estructuro el proyecto. Cuéntame:\n1. ¿Cuál es el objetivo principal del producto?\n2. ¿Qué stack tecnológico prefieres (ej. FastAPI, React, Node)?\n3. ¿Cuál es nuestra fecha estimada de entrega o MVP?"
 
-    # 4. Proyectos activos
-    elif any(k in user_lower for k in ["proyectos activos", "que proyectos", "qué proyectos", "mis proyectos"]):
+    # 5. Proyectos activos
+    elif any(k in user_lower for k in ["proyectos activos", "que proyectos", "qué proyectos", "mis proyectos", "cuantos proyectos", "cuántos proyectos"]):
         if not projects:
             final_text = "No tenemos proyectos activos registrados actualmente. ¿Quieres que aperturemos uno nuevo?"
         else:
@@ -573,6 +603,7 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
             for p in projects:
                 lines.append(f"• **{p['title']}** (Stack: {p['tech_stack']}) — Meta: {p['target_deadline']}")
             final_text = "\n".join(lines)
+
 
     # 5. Rendimiento y carga de trabajo
     elif any(k in user_lower for k in ["rendimiento", "carga", "workload", "capacidad", "horas"]):
