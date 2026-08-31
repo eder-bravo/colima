@@ -815,11 +815,26 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
             final_text = "\n".join(lines)
 
     else:
-        # Contextual response
+        # Natural, context-aware catch-all
         t_count = len(talents)
         p_count = len(projects)
         task_count = len(tasks)
-        final_text = f"Entendido. Como PM del equipo (tenemos {t_count} desarrollador(es) y {task_count} tarea(s) en Kanban), te recomiendo: definir el alcance, revisar la carga del personal o consultar las sugerencias autónomas."
+
+        # Estado-del-arte contextual  
+        if t_count == 0 and p_count == 0:
+            final_text = "Aún estamos sin equipo ni proyectos. Carga los CVs en 'Mis Trabajadores' o dime el nombre del proyecto y te ayudo a arrancarlo."
+        elif t_count > 0 and p_count == 0:
+            names = [t["name"].split()[0] for t in talents[:3]]
+            final_text = f"Tenemos al equipo listo ({', '.join(names)}{'...' if t_count > 3 else ''}), pero sin proyecto asignado todavía. ¿Quieres que definamos el objetivo, el stack y arrancamos?"
+        elif p_count > 0 and task_count == 0:
+            final_text = f"El proyecto está registrado pero el tablero está vacío. ¿Arrancamos con la planificación del sprint? Puedo distribuir las tareas según las fortalezas del equipo."
+        elif task_count > 0:
+            done = sum(1 for t in tasks if t["status"] == "done")
+            pct = round(done / task_count * 100) if task_count > 0 else 0
+            final_text = f"Vamos al {pct}% de avance ({done}/{task_count} tareas completadas). ¿Revisamos bloqueos, ajustamos asignaciones o prefieres el reporte del daily?"
+        else:
+            final_text = "Aquí estoy. Cuéntame qué necesitas — puedo revisar el equipo, planificar tareas, agendar una reunión o analizar los riesgos del sprint."
+
 
     agent_msg_id = f"msg-hermes-{int(time.time()*1000)}"
     conn = get_db_connection()
