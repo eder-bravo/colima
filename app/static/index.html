@@ -11,7 +11,7 @@
     }
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=3.0">
+  <link rel="stylesheet" href="/static/style.css?v=4.0">
 </head>
 <body class="h-full flex flex-col font-sans overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
 
@@ -90,6 +90,12 @@
       <!-- Quick Chips -->
       <div class="p-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 flex gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
         <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-full transition">
+          💡 Definir nuevo proyecto
+        </button>
+        <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-full transition">
+          👥 Carga del personal
+        </button>
+        <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-full transition">
           🚀 Planifica el MVP
         </button>
         <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-full transition">
@@ -99,7 +105,7 @@
           📅 Agenda Checkpoint
         </button>
         <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-full transition">
-          👥 Pedir Aprobación
+          ⚖️ Pedir Aprobación
         </button>
       </div>
 
@@ -110,7 +116,7 @@
             H
           </div>
           <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl rounded-tl-xs p-2.5 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-xs leading-relaxed">
-            <p>¡Hola! Soy Hermes, tu PM asistente. Puedo ayudarte a armar el equipo con los CVs, planificar el backlog en el Kanban y agendar las ceremonias. ¿Arrancamos planificando el MVP?</p>
+            <p>¡Hola! Soy Hermes, tu PM asistente. Puedo ayudarte a definir proyectos nuevos, monitorear la carga de trabajo del equipo, planificar el Kanban y agendar reuniones. ¿Por dónde empezamos hoy?</p>
           </div>
         </div>
       </div>
@@ -121,7 +127,7 @@
           <input
             type="text"
             id="chat-input"
-            placeholder="Mensaje a Hermes (ej. 'Planifica el sprint')..."
+            placeholder="Mensaje a Hermes (ej. 'Definir nuevo proyecto')..."
             class="flex-1 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 outline-none transition"
             autocomplete="off"
           />
@@ -145,7 +151,7 @@
           <i class="fa-solid fa-chart-kanban"></i> Tablero Kanban
         </button>
         <button onclick="switchStage('skills')" id="tab-stage-skills" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
-          <i class="fa-solid fa-brain"></i> Habilidades (<span id="active-skills-count">5</span>)
+          <i class="fa-solid fa-brain"></i> Habilidades (<span id="active-skills-count">6</span>)
         </button>
         <button onclick="switchStage('talent')" id="tab-stage-talent" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
           <i class="fa-solid fa-users"></i> Talent ATS (<span id="talent-count-badge">0</span>)
@@ -334,6 +340,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=3.0"></script>
+  <script src="/static/app.js?v=4.0"></script>
 </body>
 </html>

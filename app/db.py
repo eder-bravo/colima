@@ -17,6 +17,22 @@ def get_db_connection() -> sqlite3.Connection:
 
 DEFAULT_SKILLS = [
     {
+        "id": "skill-project-discovery",
+        "name": "Apertura & Descubrimiento de Proyectos",
+        "icon": "fa-diagram-project",
+        "description": "Formula preguntas de PM para definir alcance, stack y objetivos antes de aperturar un proyecto.",
+        "prompt_instructions": "Cuando el usuario quiera iniciar o definir un nuevo producto, realiza 2 o 3 preguntas concisas de PM (problema a resolver, stack tecnológico preferido y fecha objetivo). Tras recibir la información, crea formalmente el proyecto y su backlog inicial.",
+        "is_active": 1
+    },
+    {
+        "id": "skill-workload-capacity",
+        "name": "Control de Carga & Rendimiento del Equipo",
+        "icon": "fa-chart-pie",
+        "description": "Monitorea horas asignadas, productividad y previene el agotamiento (burnout) del equipo.",
+        "prompt_instructions": "Usa 'get_team_workload' para analizar la capacidad del equipo. Si un desarrollador tiene más de 30 horas acumuladas, advierte sobre la sobrecarga y sugiere reasignar tareas a miembros disponibles.",
+        "is_active": 1
+    },
+    {
         "id": "skill-staffing-ats",
         "name": "Staffing & Matching ATS",
         "icon": "fa-users-gear",
@@ -46,14 +62,6 @@ DEFAULT_SKILLS = [
         "icon": "fa-scale-balanced",
         "description": "Escala decisiones críticas (presupuesto, contrataciones, cambios de alcance) a la dirección antes de actuar.",
         "prompt_instructions": "Ante cambios imprevistos de alcance o necesidad de contratar personal, NO tomes la decisión final solo. Usa 'request_managerial_approval' para pedir autorización al Gerente.",
-        "is_active": 1
-    },
-    {
-        "id": "skill-executive-briefing",
-        "name": "Minutas & Correo Ejecutivo",
-        "icon": "fa-envelope-open-text",
-        "description": "Redacta informes ejecutivos concisos y formales para directores y clientes.",
-        "prompt_instructions": "Redacta minutas estructuradas con formato ejecutivo: Objetivo, Avance %, Riesgos Principales y Próximos Pasos.",
         "is_active": 1
     }
 ]
@@ -94,6 +102,20 @@ def init_db():
     );
     """)
 
+    # Projects
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        tech_stack TEXT,
+        target_deadline TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL
+    );
+    """)
+
     # Talent Pool (ATS)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS talent_profiles (
@@ -103,23 +125,24 @@ def init_db():
         role TEXT NOT NULL,
         seniority TEXT NOT NULL,
         skills TEXT NOT NULL,
-        productivity_factor REAL NOT NULL DEFAULT 1.0,
-        availability_status TEXT NOT NULL DEFAULT 'available',
-        current_task_id TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+        raw_cv_text TEXT,
+        source_file TEXT,
+        productivity_factor REAL DEFAULT 1.0,
+        availability_status TEXT DEFAULT 'available',
+        created_at TEXT NOT NULL
     );
     """)
 
-    # Kanban Tasks
+    # Tasks / Kanban
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL,
+        project_id TEXT,
         title TEXT NOT NULL,
-        description TEXT DEFAULT '',
+        description TEXT,
         role_required TEXT NOT NULL,
-        estimated_hours REAL NOT NULL DEFAULT 8.0,
+        estimated_hours REAL NOT NULL,
         completed_hours REAL NOT NULL DEFAULT 0.0,
         status TEXT NOT NULL DEFAULT 'backlog',
         assignee_id TEXT,
@@ -127,70 +150,7 @@ def init_db():
         priority TEXT NOT NULL DEFAULT 'medium',
         blocker_reason TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
-    );
-    """)
-
-    # Skills Hub
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS skills (
-        id TEXT NOT NULL,
-        workspace_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        icon TEXT NOT NULL DEFAULT 'fa-brain',
-        description TEXT NOT NULL,
-        prompt_instructions TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (id, workspace_id),
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
-    );
-    """)
-
-    # Calendar Events
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS calendar_events (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        sim_date TEXT NOT NULL,
-        time_slot TEXT NOT NULL,
-        event_type TEXT NOT NULL DEFAULT 'meeting',
-        attendees TEXT NOT NULL,
-        agenda TEXT DEFAULT '',
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
-    );
-    """)
-
-    # Managerial Decisions & Approvals
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS managerial_decisions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        impact_summary TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        response_comment TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
-    );
-    """)
-
-    # Hiring Requests
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS hiring_requests (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        role TEXT NOT NULL,
-        required_skills TEXT NOT NULL,
-        urgency TEXT NOT NULL DEFAULT 'medium',
-        rationale TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+        updated_at TEXT NOT NULL
     );
     """)
 
@@ -204,36 +164,99 @@ def init_db():
         content TEXT NOT NULL,
         message_type TEXT NOT NULL DEFAULT 'chat',
         metadata TEXT DEFAULT '{}',
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+        created_at TEXT NOT NULL
     );
     """)
 
-    # Agent Trajectories
+    # Calendar Events
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS calendar_events (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        sim_date TEXT NOT NULL,
+        time_slot TEXT NOT NULL,
+        event_type TEXT NOT NULL DEFAULT 'meeting',
+        attendees TEXT NOT NULL,
+        agenda TEXT,
+        created_at TEXT NOT NULL
+    );
+    """)
+
+    # Managerial Decisions
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS managerial_decisions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        impact_summary TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        response_comment TEXT,
+        created_at TEXT NOT NULL
+    );
+    """)
+
+    # Skills Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS skills (
+        id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        description TEXT NOT NULL,
+        prompt_instructions TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (id, workspace_id)
+    );
+    """)
+
+    # Agent Trajectories (ReAct Inspector)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS agent_trajectories (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL,
         action_type TEXT NOT NULL,
         prompt_used TEXT NOT NULL,
-        thoughts TEXT DEFAULT '',
-        tool_calls TEXT DEFAULT '[]',
-        tool_results TEXT DEFAULT '[]',
-        final_response TEXT DEFAULT '',
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+        thoughts TEXT,
+        tool_calls TEXT,
+        tool_results TEXT,
+        final_response TEXT,
+        created_at TEXT NOT NULL
     );
     """)
 
     conn.commit()
     conn.close()
 
-def ensure_workspace_skills(workspace_id: str):
+def ensure_workspace(workspace_id: str, name: str = "Alumno"):
     conn = get_db_connection()
-    for s in DEFAULT_SKILLS:
+    row = conn.execute("SELECT id FROM workspaces WHERE id = ?;", (workspace_id,)).fetchone()
+    if not row:
         conn.execute("""
-        INSERT OR IGNORE INTO skills (id, workspace_id, name, icon, description, prompt_instructions, is_active, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """, (s["id"], workspace_id, s["name"], s["icon"], s["description"], s["prompt_instructions"], s["is_active"], datetime.utcnow().isoformat()))
+        INSERT INTO workspaces (id, name, project_name, project_description, custom_prompt, created_at)
+        VALUES (?, ?, 'Fintech Micro-Lending MVP', 'Desarrollo de un MVP para préstamos digitales con onboarding, KYC, pasarela de pagos y backoffice.', '', ?);
+        """, (workspace_id, name, datetime.utcnow().isoformat()))
+        
+        # Default project
+        conn.execute("""
+        INSERT INTO projects (id, workspace_id, title, description, tech_stack, target_deadline, status, created_at)
+        VALUES (?, ?, 'Fintech Micro-Lending MVP', 'Plataforma de préstamos digitales inmediatos con onboarding KYC.', 'FastAPI, React, PostgreSQL, Docker', '30 días', 'active', ?);
+        """, (f"prj-{workspace_id}", workspace_id, datetime.utcnow().isoformat()))
+
+    # Ensure default skills exist
+    for sk in DEFAULT_SKILLS:
+        s_row = conn.execute("SELECT id FROM skills WHERE id = ? AND workspace_id = ?;", (sk["id"], workspace_id)).fetchone()
+        if not s_row:
+            conn.execute("""
+            INSERT INTO skills (id, workspace_id, name, icon, description, prompt_instructions, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """, (sk["id"], workspace_id, sk["name"], sk["icon"], sk["description"], sk["prompt_instructions"], sk["is_active"], datetime.utcnow().isoformat()))
+
+
     conn.commit()
     conn.close()
+
+def ensure_workspace_skills(workspace_id: str):
+    ensure_workspace(workspace_id)
+

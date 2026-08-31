@@ -7,18 +7,52 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from app.db import get_db_connection
 
-BASE_HERMES_PROMPT = """Eres Hermes, un Technical Product Manager (PM) ágil, proactivo, estructurado y muy humano.
+BASE_HERMES_PROMPT = """Eres Hermes, un Technical Product Manager (PM) autónomo ágil, estructurado, proactivo y muy humano.
+
+RESPONSABILIDADES COMO PM:
+1. APERTURA Y DEFINICIÓN DE PROYECTOS: Puedes conversar con el usuario para entender nuevos productos/proyectos, hacer preguntas clave de alcance y crear formalmente el proyecto y su backlog.
+2. GESTIÓN DE EQUIPO Y CARGA: Puedes analizar la carga de trabajo, productividad y horas asignadas a cada desarrollador para evitar saturación o balancear tareas.
+3. KANBAN Y CEREMONIAS: Planificas tareas, agendas reuniones de kickoff/checkpoints y escalas decisiones gerenciales críticas.
 
 REGLAS DE COMUNICACIÓN Y TONO (CRÍTICAS):
-1. HABLA COMO UN PM EXPERTO: Sé directo, conciso, colaborativo y natural. Evita explicaciones robóticas, párrafos largos o lenguaje académico. Máximo 2 a 4 oraciones por respuesta a menos que te pidan un reporte formal.
-2. CERO METATEXTO TÉCNICO: NUNCA menciones nombres de funciones, librerías ni herramientas internas en tu texto (NUNCA escribas 'get_talent_pool()', 'schedule_meeting()', 'create_task()', etc.). Ejecuta las herramientas en silencio y habla de los resultados reales.
-3. SALUDOS Y CONVERSACIÓN: Si te dicen 'hola', 'buenas', '¿cómo estás?', saluda cordialmente en 1-2 líneas y pregunta en qué nos enfocamos hoy en el proyecto.
-4. GESTIÓN PROACTIVA: Tras planificar o detectar problemas, da un resumen breve y propón el siguiente paso lógico (ej. agendar el kickoff, revisar un bloqueo o validar con gerencia).
+1. HABLA COMO UN PM REAL: Sé directo, conciso, amigable y orientado a la acción (máximo 2 a 4 oraciones por respuesta a menos que presentes un reporte formal).
+2. NUNCA menciones nombres de funciones o herramientas técnicas en el texto (NUNCA digas 'get_talent_pool()', 'create_project()', etc.). Ejecuta las acciones en segundo plano.
+3. SALUDOS: Ante saludos cordiales, responde de forma cercana y ofrece revisar proyectos, planificar o analizar la carga del equipo.
 """
 
 GEMINI_TOOLS_DECLARATION = [
     {
         "function_declarations": [
+            {
+                "name": "create_project",
+                "description": "Apertura un nuevo proyecto con su título, descripción, stack tecnológico y fecha objetivo.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "title": {"type": "STRING", "description": "Nombre del proyecto."},
+                        "description": {"type": "STRING", "description": "Objetivo y alcance principal."},
+                        "tech_stack": {"type": "STRING", "description": "Stack de tecnologías (ej. FastAPI, React, PostgreSQL)."},
+                        "target_deadline": {"type": "STRING", "description": "Plazo estimado (ej. '4 semanas', 'Día 30')."}
+                    },
+                    "required": ["title", "description"]
+                }
+            },
+            {
+                "name": "get_projects",
+                "description": "Obtiene la lista de proyectos activos y su información en el workspace.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "get_team_workload",
+                "description": "Analiza la carga de trabajo actual, horas acumuladas y rendimiento de cada desarrollador del equipo.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {}
+                }
+            },
             {
                 "name": "get_talent_pool",
                 "description": "Obtiene los perfiles y habilidades del equipo en el ATS.",
@@ -135,7 +169,68 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
     conn = get_db_connection()
     result = {}
     
-    if tool_name == "get_talent_pool":
+    if tool_name == "create_project":
+        prj_id = f"prj-{int(time.time()*1000)}"
+        conn.execute("""
+        INSERT INTO projects (id, workspace_id, title, description, tech_stack, target_deadline, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'active', ?);
+        """, (
+            prj_id,
+            workspace_id,
+            args.get("title", "Nuevo Proyecto"),
+            args.get("description", ""),
+            args.get("tech_stack", "No especificado"),
+            args.get("target_deadline", "Por definir"),
+            datetime.utcnow().isoformat()
+        ))
+        conn.execute("""
+        UPDATE workspaces SET project_name = ?, project_description = ? WHERE id = ?;
+        """, (args.get("title"), args.get("description"), workspace_id))
+        conn.commit()
+        result = {"status": "created", "project_id": prj_id, "title": args.get("title")}
+
+    elif tool_name == "get_projects":
+        rows = conn.execute("SELECT id, title, description, tech_stack, target_deadline, status FROM projects WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+        projects = [dict(r) for r in rows]
+        result = {"projects": projects, "total_projects": len(projects)}
+
+    elif tool_name == "get_team_workload":
+        talents = conn.execute("SELECT name, role, seniority, productivity_factor FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+        tasks = conn.execute("SELECT assignee_name, estimated_hours, completed_hours, status FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+        
+        workload = {}
+        for t in talents:
+            workload[t["name"]] = {
+                "role": t["role"],
+                "seniority": t["seniority"],
+                "productivity": f"{t['productivity_factor']}x",
+                "assigned_tasks_count": 0,
+                "total_estimated_hours": 0.0,
+                "completed_hours": 0.0,
+                "saturation": "Libre"
+            }
+        
+        for task in tasks:
+            name = task["assignee_name"]
+            if name in workload:
+                workload[name]["assigned_tasks_count"] += 1
+                workload[name]["total_estimated_hours"] += task["estimated_hours"]
+                workload[name]["completed_hours"] += task["completed_hours"]
+        
+        for name, data in workload.items():
+            hrs = data["total_estimated_hours"]
+            if hrs > 30:
+                data["saturation"] = "Sobrecargado"
+            elif hrs > 15:
+                data["saturation"] = "Óptimo"
+            elif hrs > 0:
+                data["saturation"] = "Baja carga"
+            else:
+                data["saturation"] = "Disponible"
+
+        result = {"team_workload": workload}
+
+    elif tool_name == "get_talent_pool":
         rows = conn.execute("SELECT id, name, role, seniority, skills, productivity_factor, availability_status FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
         talent = []
         for r in rows:
@@ -235,7 +330,7 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
         result = {"status": "decision_requested", "decision_id": dec_id, "title": args.get("title")}
 
     elif tool_name == "generate_daily_standup_report":
-        tasks = conn.execute("SELECT title, assignee_name, status, completed_hours, estimated_hours, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+        tasks = conn.execute("SELECT title, assignee_name, status, completed_hours, estimated_hours, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id)).fetchall()
         report_data = []
         for t in tasks:
             pct = round((t["completed_hours"] / t["estimated_hours"] * 100) if t["estimated_hours"] > 0 else 0)
@@ -264,12 +359,12 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
 
     system_instruction = build_system_prompt_with_skills(workspace_id, custom_system_prompt)
 
-    # Fallback to local heuristic mode if no API key is provided
+    # Fallback heuristic mode if no API key provided
     if not api_key or len(api_key.strip()) < 10:
         return await run_simulated_fallback(workspace_id, user_message, system_instruction)
 
-    # Secure Google AI Studio call with x-goog-api-key header
-    model_name = "gemini-2.5-flash"
+    # Use official Google AI Studio Gemini 2.0 Flash (fast, free, sub-second latency with tool support)
+    model_name = "gemini-2.0-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
     headers = {
         "Content-Type": "application/json",
@@ -277,7 +372,7 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     }
 
     conn = get_db_connection()
-    recent_msgs = conn.execute("SELECT sender, content FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC LIMIT 10;", (workspace_id,)).fetchall()
+    recent_msgs = conn.execute("SELECT sender, content FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC LIMIT 8;", (workspace_id,)).fetchall()
     conn.close()
 
     contents = []
@@ -296,7 +391,7 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
         "tools": GEMINI_TOOLS_DECLARATION,
         "generationConfig": {
             "temperature": 0.4,
-            "maxOutputTokens": 1024
+            "maxOutputTokens": 800
         }
     }
 
@@ -304,10 +399,10 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     executed_tools = []
     tool_results = []
     final_text = ""
-    thinking_text = "Evaluando contexto del sprint y requerimientos..."
+    thinking_text = "Evaluando solicitud del PM..."
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=12.0) as client:
             res = await client.post(url, headers=headers, json=payload)
             if res.status_code != 200:
                 return await run_simulated_fallback(workspace_id, user_message, system_instruction)
@@ -357,7 +452,7 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
         return await run_simulated_fallback(workspace_id, user_message, system_instruction)
 
     if not final_text:
-        final_text = "Tablero actualizado y tareas organizadas para el equipo."
+        final_text = "Acción completada y estado del proyecto actualizado."
 
     # Save Assistant message
     conn = get_db_connection()
@@ -391,7 +486,7 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
         "thinking": thinking_text
     }
 
-async def run_simulated_fallback(workspace_id: str, user_message: str, system_prompt: str, error_msg: Optional[str] = None) -> Dict[str, Any]:
+async def run_simulated_fallback(workspace_id: str, user_message: str, system_prompt: str) -> Dict[str, Any]:
     conn = get_db_connection()
     user_lower = user_message.lower().strip()
     
@@ -399,16 +494,52 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
     tool_results = []
     thinking = "Evaluando solicitud del PM..."
     
-    # Natural conversation handling
-    if user_lower in ["hola", "buenas", "buenos dias", "buenas tardes", "hey", "hola hermes", "estas ahi", "estas ahi ?"]:
-        final_text = "¡Hola! Todo el equipo está activo. ¿En qué nos enfocamos hoy? ¿Planificamos el sprint, revisamos la daily o agendamos una sesión?"
+    # 1. Saludos & conversación general
+    if user_lower in ["hola", "buenas", "buenos dias", "buenas tardes", "hey", "hola hermes", "como te va?", "cómo te va?", "que tal", "qué tal"]:
+        final_text = "¡Todo en orden por acá! El equipo y el tablero están listos. ¿Quieres que definamos un nuevo proyecto, revisemos el rendimiento del personal o planifiquemos el sprint?"
 
+    # 2. Definición / Apertura de proyectos
+    elif "definir proyecto" in user_lower or "nuevo proyecto" in user_lower or "crear proyecto" in user_lower or "aperturar" in user_lower:
+        final_text = "¡Excelente! Para estructurarlo con precisión de PM, cuéntame:\n1. ¿Cuál es el objetivo principal del producto?\n2. ¿Qué stack tecnológico prefieres (ej. FastAPI, React, Node)?\n3. ¿Cuál es nuestra fecha estimada de entrega o MVP?"
+
+    # 3. Revisión de proyectos activos
+    elif "proyectos activos" in user_lower or "qué proyectos" in user_lower or "mis proyectos" in user_lower:
+        p_res = execute_tool(workspace_id, "get_projects", {})
+        executed_tools.append({"tool": "get_projects", "args": {}})
+        tool_results.append({"tool": "get_projects", "result": p_res})
+        
+        prjs = p_res.get("projects", [])
+        if not prjs:
+            final_text = "No tenemos proyectos registrados actualmente. ¿Quieres que definamos uno nuevo?"
+        else:
+            lines = ["**Proyectos Activos:**"]
+            for p in prjs:
+                lines.append(f"• **{p['title']}** ({p['status']}): {p['description'][:80]}... Stack: {p['tech_stack']}")
+            final_text = "\n".join(lines)
+
+    # 4. Rendimiento del personal y carga de trabajo
+    elif "rendimiento" in user_lower or "personal" in user_lower or "carga" in user_lower or "equipo" in user_lower or "workload" in user_lower:
+        w_res = execute_tool(workspace_id, "get_team_workload", {})
+        executed_tools.append({"tool": "get_team_workload", "args": {}})
+        tool_results.append({"tool": "get_team_workload", "result": w_res})
+        
+        workload = w_res.get("team_workload", {})
+        if not workload:
+            final_text = "Aún no hay perfiles en el ATS. Carga los CVs de prueba para evaluar la capacidad."
+        else:
+            lines = ["**Reporte de Capacidad y Rendimiento del Equipo:**"]
+            for name, d in workload.items():
+                lines.append(f"• **{name}** ({d['role']} - {d['seniority']}): {d['assigned_tasks_count']} tareas ({d['total_estimated_hours']}h asignadas) — **{d['saturation']}** (Factor {d['productivity']})")
+            final_text = "\n".join(lines)
+
+    # 5. Borrado / Limpieza de tablero
     elif "borra" in user_lower or "limpia" in user_lower or "reinicia tablero" in user_lower:
         c_res = execute_tool(workspace_id, "clear_board", {})
         executed_tools.append({"tool": "clear_board", "args": {}})
         tool_results.append({"tool": "clear_board", "result": c_res})
         final_text = "Listo, he limpiado las tareas del Kanban. Cuando quieras, podemos estructurar un nuevo backlog desde cero."
 
+    # 6. Planificación de Sprint / MVP
     elif "planifica" in user_lower or "inicia" in user_lower or "organiza" in user_lower:
         t_res = execute_tool(workspace_id, "get_talent_pool", {})
         executed_tools.append({"tool": "get_talent_pool", "args": {}})
@@ -455,6 +586,7 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         
         final_text = f"¡Planificación lista! Distribuí 5 tareas clave según las fortalezas del equipo en el ATS y agendé la reunión de Kickoff en el calendario."
 
+    # 7. Reuniones y calendario
     elif "reunión" in user_lower or "reunion" in user_lower or "calendario" in user_lower or "agendar" in user_lower or "checkpoint" in user_lower:
         m_args = {
             "title": "Checkpoint de Avance & Riesgos",
@@ -468,6 +600,7 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         tool_results.append({"tool": "schedule_meeting", "result": m_res})
         final_text = "Agendé la sesión en el calendario. Puedes ver los detalles en la pestaña **Calendario & Decisiones**."
 
+    # 8. Solicitud de aprobación / Gobernanza
     elif "contratar" in user_lower or "decisión" in user_lower or "decision" in user_lower or "aprobación" in user_lower or "aprobar" in user_lower:
         d_args = {
             "title": "Aprobación: Contratación de Senior Mobile Dev",
@@ -479,6 +612,7 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         tool_results.append({"tool": "request_managerial_approval", "result": d_res})
         final_text = "Creé una solicitud de aprobación para la Dirección en la pestaña **Calendario & Decisiones**. Échale un ojo para aprobarla o rechazarla."
 
+    # 9. Daily Standup
     elif "standup" in user_lower or "daily" in user_lower or "estado" in user_lower or "cómo vamos" in user_lower:
         s_res = execute_tool(workspace_id, "generate_daily_standup_report", {})
         executed_tools.append({"tool": "generate_daily_standup_report", "args": {}})
@@ -494,7 +628,7 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
             final_text = "\n".join(lines)
 
     else:
-        final_text = "Entendido. El equipo está avanzando. Puedes pedirme: *'Planifica el MVP'*, *'Cómo va la daily'* o *'Agenda una reunión de avance'*."
+        final_text = "Entendido. Puedes pedirme: *'Definir un nuevo proyecto'*, *'Revisar carga del personal'*, *'Planificar el sprint'* o *'Daily standup'*."
 
     agent_msg_id = f"msg-hermes-{int(time.time()*1000)}"
     conn.execute("""
