@@ -395,7 +395,13 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     if not api_key or len(api_key.strip()) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    CANDIDATE_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+    # Model requested by user
+    CANDIDATE_MODELS = [
+        "gemma-4-26b-a4b-it",
+        "gemma-4-31b-it",
+        "gemma-2-27b-it",
+        "gemini-3.6-flash"
+    ]
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key.strip()
@@ -451,8 +457,21 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                 res = await client.post(url, headers=headers, json=payload)
                 if res.status_code == 200:
                     break
-                else:
-                    print(f"[{model_name} failed with {res.status_code}]: {res.text[:150]}")
+                print(f"[{model_name} standard call failed with {res.status_code}]: {res.text[:150]}")
+                
+                # If 400 error (e.g. Gemma doesn't accept tools or system_instruction format), retry in standard prompt mode
+                if res.status_code == 400:
+                    gemma_contents = [{"role": "user", "parts": [{"text": f"{system_instruction}\n\n[Mensaje del Usuario]: {user_message}"}]}]
+                    gemma_payload = {
+                        "contents": gemma_contents,
+                        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 800}
+                    }
+                    res_gemma = await client.post(url, headers=headers, json=gemma_payload)
+                    if res_gemma.status_code == 200:
+                        res = res_gemma
+                        break
+                    else:
+                        print(f"[{model_name} gemma_payload failed with {res_gemma.status_code}]: {res_gemma.text[:150]}")
 
             if not res or res.status_code != 200:
                 return await run_smart_fallback(workspace_id, user_message, system_instruction)
@@ -574,7 +593,7 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
 
     # 1. Identidad del modelo
     elif any(k in user_lower for k in ["que modelo", "qué modelo", "cual modelo", "cuál modelo", "gemma", "gemini", "quien eres", "quién eres"]):
-        final_text = "Soy **Hermes PM**, un Asistente Autónomo de Gestión de Equipos de Software impulsado por **Google AI Studio (Gemini Flash)**. Estoy conectado en tiempo real al ATS, Kanban y Calendario del proyecto para asistirte."
+        final_text = "Soy **Hermes PM**, un Asistente Autónomo de Gestión de Equipos de Software impulsado por **Google AI Studio (Gemma 4 26B-A4B-IT)**. Estoy conectado en tiempo real al ATS, Kanban y Calendario del proyecto para asistirte."
 
     # 2. Preguntas sobre trabajadores / equipo
     elif any(k in user_lower for k in ["cuantos trabajadores", "cuántos trabajadores", "quienes trabajan", "quiénes trabajan", "nuestro equipo", "los desarrolladores", "mi equipo", "trabajadores"]):
