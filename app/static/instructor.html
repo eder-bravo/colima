@@ -1,200 +1,175 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<html lang="es" class="h-full">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control Maestro del Instructor — Colima</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    }
+  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body class="h-full flex flex-col font-sans bg-slate-950 text-slate-100">
+<body class="h-full flex flex-col font-sans bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
 
-  <!-- AUTH OVERLAY IF NOT LOGGED IN -->
-  <div id="auth-screen" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl space-y-5">
-      <div class="w-16 h-16 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 mx-auto flex items-center justify-center text-indigo-400 text-2xl">
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl space-y-5">
+      <div class="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center text-2xl shadow-sm">
         <i class="fa-solid fa-lock"></i>
       </div>
       <div>
-        <h2 class="text-xl font-bold text-white">Panel Maestro del Instructor</h2>
-        <p class="text-xs text-slate-400 mt-1">Control global del motor de tiempo y eventos del taller.</p>
+        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Panel Maestro del Instructor</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Control centralizado del tiempo y eventos del taller.</p>
       </div>
       
       <form id="pin-form" class="space-y-4">
         <input
           type="password"
           id="pin-input"
-          placeholder="Ingresa el PIN de Instructor..."
-          class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 text-center font-mono tracking-widest text-lg text-white rounded-xl py-3 outline-none"
+          placeholder="Ingresa el PIN..."
+          class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-center font-mono tracking-widest text-lg text-slate-900 dark:text-white rounded-xl py-2.5 outline-none focus:border-indigo-500"
           required
         />
         <button
           type="submit"
-          class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-600/30 transition text-sm"
+          class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl shadow-sm transition text-xs"
         >
           Desbloquear Panel
         </button>
-        <p id="pin-error" class="text-xs text-rose-400 hidden">PIN incorrecto. Intenta de nuevo.</p>
+        <p id="pin-error" class="text-xs text-rose-500 hidden">PIN incorrecto. Intenta de nuevo.</p>
       </form>
     </div>
   </div>
 
-  <!-- INSTRUCTOR APP (SHOWN AFTER AUTH) -->
+  <!-- INSTRUCTOR APP -->
   <div id="app-screen" class="flex-1 flex flex-col overflow-y-auto">
-    <!-- Header -->
-    <header class="h-16 border-b border-slate-800 bg-slate-900 px-6 flex items-center justify-between shrink-0">
+    <header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 flex items-center justify-between shrink-0 shadow-sm">
       <div class="flex items-center space-x-3">
         <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold">
           <i class="fa-solid fa-gauge-high"></i>
         </div>
         <div>
-          <h1 class="font-bold text-sm text-white">Control Maestro de Simulación</h1>
-          <p class="text-xs text-slate-400">Taller: Asistentes PM Autónomos con IA</p>
+          <h1 class="font-bold text-sm text-slate-900 dark:text-white">Control Maestro de Simulación</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Taller: Asistentes PM Autónomos con IA</p>
         </div>
       </div>
-      <div class="flex items-center space-x-4">
-        <a href="/" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+      <div class="flex items-center space-x-3">
+        <a href="/" target="_blank" class="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
           <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Vista Alumno
         </a>
-        <button id="btn-logout" class="text-xs text-slate-400 hover:text-slate-200">
+        <button id="btn-inst-theme" title="Cambiar Tema" class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+          <i class="fa-solid fa-circle-half-stroke text-xs"></i>
+        </button>
+        <button id="btn-logout" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
           <i class="fa-solid fa-right-from-bracket"></i>
         </button>
       </div>
     </header>
 
-    <div class="max-w-6xl w-full mx-auto p-6 space-y-6">
+    <div class="max-w-5xl w-full mx-auto p-6 space-y-6">
       
-      <!-- MASTER CLOCK HERO CARD -->
-      <div class="bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-        <div class="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+      <!-- HERO MASTER CLOCK -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-6">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
-            <div class="flex items-center gap-2 mb-2">
-              <span class="relative flex h-3 w-3">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="relative flex h-2.5 w-2.5">
                 <span id="inst-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span id="inst-dot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                <span id="inst-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
-              <span id="inst-status-label" class="text-xs uppercase font-bold tracking-widest text-emerald-400">RELOJ SINCRONIZADO</span>
+              <span id="inst-status-label" class="text-[11px] uppercase font-bold tracking-widest text-emerald-600 dark:text-emerald-400">RELOJ GLOBAL</span>
             </div>
-            <div class="text-4xl md:text-5xl font-mono font-extrabold text-white tracking-tight" id="inst-time-display">
+            <div class="text-3xl md:text-4xl font-mono font-extrabold text-slate-900 dark:text-white" id="inst-time-display">
               12 Sep 2030, 09:00 AM
             </div>
-            <p class="text-sm font-semibold text-indigo-300 mt-2">
-              <span id="inst-day-display">Día 1 del Proyecto</span> • Velocidad Actual: <span id="inst-speed-display" class="font-mono text-white">0x (Pausado)</span>
+            <p class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-1">
+              <span id="inst-day-display">Día 1 del Proyecto</span> • Velocidad: <span id="inst-speed-display" class="font-mono font-bold text-slate-900 dark:text-white">0x (Pausado)</span>
             </p>
           </div>
 
           <!-- Speed Controls -->
-          <div class="flex flex-wrap gap-2 justify-center">
-            <button onclick="setSpeed(0)" class="speed-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="0">
+          <div class="flex flex-wrap gap-1.5 justify-center">
+            <button onclick="setSpeed(0)" class="speed-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="0">
               <i class="fa-solid fa-pause"></i> Pausar
             </button>
-            <button onclick="setSpeed(1)" class="speed-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="1">
+            <button onclick="setSpeed(1)" class="speed-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="1">
               <i class="fa-solid fa-play"></i> 1x (1s = 1m)
             </button>
-            <button onclick="setSpeed(5)" class="speed-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="5">
+            <button onclick="setSpeed(5)" class="speed-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="5">
               <i class="fa-solid fa-forward"></i> 5x (1s = 5m)
             </button>
-            <button onclick="setSpeed(30)" class="speed-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="30">
+            <button onclick="setSpeed(30)" class="speed-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="30">
               <i class="fa-solid fa-bolt"></i> 30x (1s = 30m)
             </button>
-            <button onclick="setSpeed(120)" class="speed-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="120">
+            <button onclick="setSpeed(120)" class="speed-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5" data-speed="120">
               <i class="fa-solid fa-rocket"></i> 120x (1s = 2h)
             </button>
           </div>
         </div>
 
-        <!-- Quick Jump Buttons -->
-        <div class="mt-6 pt-6 border-t border-slate-800 flex items-center justify-between flex-wrap gap-3">
-          <div class="flex gap-3">
-            <button onclick="stepDay()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
-              <i class="fa-solid fa-calendar-plus"></i> Avanzar +1 Día Instantáneo
+        <div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
+          <div class="flex gap-2">
+            <button onclick="stepDay()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-2">
+              <i class="fa-solid fa-calendar-plus"></i> +1 Día Instantáneo
             </button>
-            <button onclick="resetClock()" class="bg-slate-800 hover:bg-rose-950 hover:border-rose-700 text-rose-300 border border-slate-700 text-xs font-semibold px-4 py-2 rounded-xl transition flex items-center gap-2">
-              <i class="fa-solid fa-rotate-left"></i> Reiniciar al Día 1 (12 Sep)
+            <button onclick="resetClock()" class="bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-slate-700 text-xs font-semibold px-3.5 py-2 rounded-xl transition flex items-center gap-2">
+              <i class="fa-solid fa-rotate-left"></i> Reiniciar al Día 1
             </button>
           </div>
 
-          <!-- Active Students Telemetry -->
-          <div class="flex items-center gap-2 bg-slate-950/60 px-4 py-1.5 rounded-full border border-slate-800 text-xs">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span class="text-slate-400">Alumnos Conectados en Vivo:</span>
-            <b id="stat-active-students" class="text-white">0</b>
+          <div class="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 px-3.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 text-xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span class="text-slate-500">Alumnos Conectados:</span>
+            <b id="stat-active-students" class="text-slate-900 dark:text-white">0</b>
           </div>
         </div>
       </div>
 
-      <!-- INCIDENT / CHAOS DISPATCHER -->
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+      <!-- CHAOS INJECTOR -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
         <div>
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-fire text-amber-400"></i> Inyector de Caos & Eventos Globales
+          <h2 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-fire text-amber-500"></i> Inyector de Caos & Eventos Imprevistos
           </h2>
-          <p class="text-xs text-slate-400">Dispara eventos imprevistos en tiempo real a todos los alumnos para evaluar la reacción de sus Asistentes PM Hermes.</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Dispara eventos en tiempo real a todos los alumnos para probar las habilidades de Hermes.</p>
         </div>
 
-        <!-- Quick Preset Chaos Buttons -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          
-          <button onclick="injectPreset('sick')" class="p-4 bg-slate-950 hover:bg-rose-950/40 border border-slate-800 hover:border-rose-500/50 rounded-2xl text-left transition group">
-            <div class="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-sm mb-2 group-hover:scale-110 transition">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button onclick="injectPreset('sick')" class="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-rose-400 rounded-2xl text-left transition">
+            <div class="w-7 h-7 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xs mb-2">
               <i class="fa-solid fa-user-slash"></i>
             </div>
-            <h4 class="text-xs font-bold text-rose-300">Enfermedad de Dev</h4>
-            <p class="text-[11px] text-slate-400 mt-1">Dev Backend toma 3 días de incapacidad médica. Tareas en riesgo de retraso.</p>
+            <h4 class="text-xs font-bold text-slate-900 dark:text-white">Dev Backend Enfermo</h4>
+            <p class="text-[11px] text-slate-500 mt-1">3 días de incapacidad médica. Tareas en riesgo de retraso.</p>
           </button>
 
-          <button onclick="injectPreset('scope')" class="p-4 bg-slate-950 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 rounded-2xl text-left transition group">
-            <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm mb-2 group-hover:scale-110 transition">
+          <button onclick="injectPreset('scope')" class="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-400 rounded-2xl text-left transition">
+            <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xs mb-2">
               <i class="fa-solid fa-list-check"></i>
             </div>
-            <h4 class="text-xs font-bold text-amber-300">Cambio de Alcance</h4>
-            <p class="text-[11px] text-slate-400 mt-1">El cliente exige integrar pasarela SPEI urgente no presupuestada.</p>
+            <h4 class="text-xs font-bold text-slate-900 dark:text-white">Cambio de Alcance</h4>
+            <p class="text-[11px] text-slate-500 mt-1">El cliente exige pasarela bancaria SPEI no planificada.</p>
           </button>
 
-          <button onclick="injectPreset('speedup')" class="p-4 bg-slate-950 hover:bg-emerald-950/40 border border-slate-800 hover:border-emerald-500/50 rounded-2xl text-left transition group">
-            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm mb-2 group-hover:scale-110 transition">
+          <button onclick="injectPreset('speedup')" class="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 rounded-2xl text-left transition">
+            <div class="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs mb-2">
               <i class="fa-solid fa-bolt"></i>
             </div>
-            <h4 class="text-xs font-bold text-emerald-300">Entrega Temprana</h4>
-            <p class="text-[11px] text-slate-400 mt-1">Junior Frontend concluye componentes 40% antes de lo estimado.</p>
+            <h4 class="text-xs font-bold text-slate-900 dark:text-white">Entrega Rápida Frontend</h4>
+            <p class="text-[11px] text-slate-500 mt-1">Junior concluye interfaces 40% antes de lo estimado.</p>
           </button>
 
-          <button onclick="injectPreset('outage')" class="p-4 bg-slate-950 hover:bg-purple-950/40 border border-slate-800 hover:border-purple-500/50 rounded-2xl text-left transition group">
-            <div class="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center text-sm mb-2 group-hover:scale-110 transition">
+          <button onclick="injectPreset('outage')" class="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-purple-400 rounded-2xl text-left transition">
+            <div class="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xs mb-2">
               <i class="fa-solid fa-bug"></i>
             </div>
-            <h4 class="text-xs font-bold text-purple-300">Bug Crítico en QA</h4>
-            <p class="text-[11px] text-slate-400 mt-1">Fallo de seguridad en JWT bloquea el pase de QA a producción.</p>
+            <h4 class="text-xs font-bold text-slate-900 dark:text-white">Bug Crítico en QA</h4>
+            <p class="text-[11px] text-slate-500 mt-1">Fallo en autenticación JWT bloquea el pase a producción.</p>
           </button>
-
-        </div>
-
-        <!-- Custom Event Trigger -->
-        <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-          <h4 class="text-xs font-bold text-slate-300 mb-2">Lanzar Evento Personalizado:</h4>
-          <form id="custom-event-form" class="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <input
-              type="text"
-              id="event-title"
-              placeholder="Título del evento (ej. 'API bancaria en mantenimiento')"
-              class="md:col-span-4 bg-slate-900 border border-slate-700 text-xs px-3 py-2 rounded-xl text-white outline-none"
-              required
-            />
-            <input
-              type="text"
-              id="event-desc"
-              placeholder="Descripción del imprevisto..."
-              class="md:col-span-6 bg-slate-900 border border-slate-700 text-xs px-3 py-2 rounded-xl text-white outline-none"
-              required
-            />
-            <button
-              type="submit"
-              class="md:col-span-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-2 rounded-xl transition"
-            >
-              Emitir a Todos
-            </button>
-          </form>
         </div>
       </div>
 

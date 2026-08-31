@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 import time
 import httpx
@@ -6,16 +7,15 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from app.db import get_db_connection
 
-HERMES_SYSTEM_PROMPT = """Eres Hermes, un Asistente Product Manager (PM) Autónomo con Inteligencia Artificial, especializado en la gestión ágil de equipos de software y ejecución de sprints de alto impacto.
+BASE_HERMES_PROMPT = """Eres Hermes, un Asistente Product Manager (PM) Autónomo con Inteligencia Artificial, especializado en la gestión ágil de software y dirección de equipos técnicos.
 
-Tus responsabilidades principales son:
-1. ANALIZAR EL POOL DE TALENTO (ATS): Evaluar los CVs/perfiles disponibles (seniority, habilidades, capacidad) para asignar las tareas correctas a las personas idóneas.
-2. ESTRUCTURAR EL PROYECTO: Desglosar los requerimientos en tareas claras con estimaciones realistas de horas y prioridades bien fundamentadas.
-3. MONITORIZAR Y RESOLVER BLOQUEOS: Si detectas que una tarea está bloqueada o un miembro del equipo se enferma/atrasa, reasigna tareas proactivamente o redistribuye la carga.
-4. REQUISICIÓN DE CONTRATACIÓN: Si el alcance requiere una habilidad que nadie en el equipo domina o el equipo está saturado para la fecha límite, emite una requisición formal de contratación usando la herramienta correspondiente.
-5. COMUNICACIÓN ÁGIL: Mantén un tono profesional, ejecutivo, claro y colaborativo en el chat del equipo.
-
-Dispones de herramientas (function calling) para interactuar directamente con el tablero Kanban y el sistema ATS. Ejecútalas cuando sea necesario.
+Tus responsabilidades fundamentales:
+1. STAFFING & ATS: Asignar tareas evaluando habilidades, seniority y capacidad del talento disponible.
+2. GESTIÓN DEL SPRINT: Desglosar requerimientos técnicos en tareas claras con estimaciones realistas.
+3. RESOLUCIÓN DE BLOQUEOS: Si una tarea se atrasa o un desarrollador se bloquea, reasigna o ajusta prioridades.
+4. GOBERNANZA & DECISIONES GERENCIALES: Cuando ocurran imprevistos mayores (cambios de alcance, necesidad de contratación o presupuesto), solicita la aprobación del Gerente con 'request_managerial_approval'.
+5. CEREMONIAS & CALENDARIO: Agenda ceremonias clave (Planning, Daily, Demos, 1-on-1s) con 'schedule_meeting'.
+6. COMUNICACIÓN EJECUTIVA: Mantén un tono estructurado, claro, profesional y ágil.
 """
 
 GEMINI_TOOLS_DECLARATION = [
@@ -23,7 +23,7 @@ GEMINI_TOOLS_DECLARATION = [
         "function_declarations": [
             {
                 "name": "get_talent_pool",
-                "description": "Obtiene la lista completa de desarrolladores y especialistas disponibles en el ATS con sus habilidades técnicas, seniority y estado.",
+                "description": "Obtiene la lista completa de perfiles en el ATS con sus habilidades, seniority y disponibilidad.",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {}
@@ -31,50 +31,64 @@ GEMINI_TOOLS_DECLARATION = [
             },
             {
                 "name": "create_task",
-                "description": "Crea una nueva tarea en el tablero Kanban asignándola al trabajador más adecuado según su perfil de ATS.",
+                "description": "Crea una nueva tarea en el Kanban y la asigna a un miembro del equipo según el ATS.",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
-                        "title": {"type": "STRING", "description": "Título descriptivo de la tarea técnica o de gestión."},
-                        "description": {"type": "STRING", "description": "Detalles técnicos, criterios de aceptación y alcance."},
-                        "role_required": {"type": "STRING", "description": "Rol requerido (ej. Backend Developer, Frontend Developer, QA Automation, DevOps)."},
-                        "estimated_hours": {"type": "NUMBER", "description": "Estimación en horas de trabajo (ej. 8.0, 16.0, 24.0)."},
-                        "assignee_name": {"type": "STRING", "description": "Nombre exacto del trabajador asignado según el pool de talento."},
-                        "priority": {"type": "STRING", "enum": ["low", "medium", "high", "urgent"], "description": "Nivel de prioridad."}
+                        "title": {"type": "STRING", "description": "Título descriptivo de la tarea."},
+                        "description": {"type": "STRING", "description": "Detalles técnicos y alcance."},
+                        "role_required": {"type": "STRING", "description": "Rol requerido (ej. Backend Developer, Frontend, QA)."},
+                        "estimated_hours": {"type": "NUMBER", "description": "Estimación en horas de trabajo."},
+                        "assignee_name": {"type": "STRING", "description": "Nombre del desarrollador asignado."},
+                        "priority": {"type": "STRING", "enum": ["low", "medium", "high", "urgent"], "description": "Prioridad de la tarea."}
                     },
                     "required": ["title", "role_required", "estimated_hours", "assignee_name"]
                 }
             },
             {
                 "name": "reassign_task",
-                "description": "Reasigna una tarea a otro miembro del equipo debido a atrasos, incidencias o redistribución de carga.",
+                "description": "Reasigna una tarea a otro miembro del equipo debido a demoras o incidencias.",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
                         "task_id": {"type": "STRING", "description": "ID de la tarea a reasignar."},
-                        "new_assignee_name": {"type": "STRING", "description": "Nombre del nuevo miembro del equipo que asumirá la tarea."},
-                        "reason": {"type": "STRING", "description": "Justificación técnica o de gestión para la reasignación."}
+                        "new_assignee_name": {"type": "STRING", "description": "Nombre del nuevo responsable."},
+                        "reason": {"type": "STRING", "description": "Justificación para la reasignación."}
                     },
                     "required": ["task_id", "new_assignee_name", "reason"]
                 }
             },
             {
-                "name": "request_new_hire",
-                "description": "Emite una solicitud formal de contratación cuando el equipo carece de un perfil indispensable para el éxito del proyecto.",
+                "name": "schedule_meeting",
+                "description": "Agenda una reunión o ceremonia en el calendario del equipo.",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
-                        "role": {"type": "STRING", "description": "Título del puesto requerido (ej. Senior Mobile Dev, Security Specialist)."},
-                        "required_skills": {"type": "STRING", "description": "Habilidades técnicas indispensables separadas por comas."},
-                        "urgency": {"type": "STRING", "enum": ["medium", "high", "critical"], "description": "Nivel de urgencia."},
-                        "rationale": {"type": "STRING", "description": "Explicación de por qué el equipo actual no puede cubrir esta necesidad."}
+                        "title": {"type": "STRING", "description": "Título de la reunión (ej. Sprint Review, Refinement, Triage de Emergencia)."},
+                        "sim_date": {"type": "STRING", "description": "Fecha simulada (ej. '15 Sep 2030' o 'Día 4')."},
+                        "time_slot": {"type": "STRING", "description": "Horario (ej. '10:00 AM - 11:00 AM')."},
+                        "attendees": {"type": "STRING", "description": "Participantes convocados (ej. 'Todo el equipo', 'Tech Lead + Backend')."},
+                        "agenda": {"type": "STRING", "description": "Puntos a tratar en la reunión."}
                     },
-                    "required": ["role", "required_skills", "rationale"]
+                    "required": ["title", "sim_date", "time_slot", "attendees"]
+                }
+            },
+            {
+                "name": "request_managerial_approval",
+                "description": "Escala una decisión crítica a la Gerencia / Dirección para su aprobación formal antes de actuar.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "title": {"type": "STRING", "description": "Título de la decisión (ej. 'Aprobación de Contratación Senior Mobile')."},
+                        "description": {"type": "STRING", "description": "Detalle del dilema o necesidad técnica."},
+                        "impact_summary": {"type": "STRING", "description": "Impacto en tiempo, costo o alcance del proyecto."}
+                    },
+                    "required": ["title", "description", "impact_summary"]
                 }
             },
             {
                 "name": "generate_daily_standup_report",
-                "description": "Escanea el tablero y genera un reporte de Daily Standup con el progreso de cada desarrollador, alertas y próximos pasos.",
+                "description": "Escanea el Kanban y genera un informe de Daily Standup con el progreso de cada desarrollador y alertas.",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {}
@@ -83,6 +97,22 @@ GEMINI_TOOLS_DECLARATION = [
         ]
     }
 ]
+
+def build_system_prompt_with_skills(workspace_id: str, custom_prompt: Optional[str] = None) -> str:
+    conn = get_db_connection()
+    skills = conn.execute("SELECT name, prompt_instructions FROM skills WHERE workspace_id = ? AND is_active = 1;", (workspace_id,)).fetchall()
+    conn.close()
+
+    parts = [BASE_HERMES_PROMPT]
+    if custom_prompt and len(custom_prompt.strip()) > 5:
+        parts.append(f"\n[INSTRUCCIONES PERSONALIZADAS DEL PROYECTO]:\n{custom_prompt.strip()}")
+
+    if skills:
+        parts.append("\n[HABILIDADES ACTIVAS (SKILLS HUB)]:")
+        for s in skills:
+            parts.append(f"- **{s['name']}**: {s['prompt_instructions']}")
+
+    return "\n\n".join(parts)
 
 def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     conn = get_db_connection()
@@ -105,7 +135,6 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
     elif tool_name == "create_task":
         task_id = f"tsk-{int(time.time()*1000)}-{uuid.uuid4().hex[:4]}"
         assignee_name = args.get("assignee_name", "")
-        # Find assignee id
         row = conn.execute("SELECT id FROM talent_profiles WHERE workspace_id = ? AND LOWER(name) LIKE ?;", (workspace_id, f"%{assignee_name.lower().strip()}%")).fetchone()
         assignee_id = row["id"] if row else None
 
@@ -144,22 +173,39 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
         conn.commit()
         result = {"status": "reassigned", "task_id": task_id, "new_assignee": new_name, "reason": reason}
 
-    elif tool_name == "request_new_hire":
-        req_id = f"hire-{int(time.time()*1000)}"
+    elif tool_name == "schedule_meeting":
+        evt_id = f"evt-{int(time.time()*1000)}"
         conn.execute("""
-        INSERT INTO hiring_requests (id, workspace_id, role, required_skills, urgency, rationale, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?);
+        INSERT INTO calendar_events (id, workspace_id, title, sim_date, time_slot, event_type, attendees, agenda, created_at)
+        VALUES (?, ?, ?, ?, ?, 'meeting', ?, ?, ?);
         """, (
-            req_id,
+            evt_id,
             workspace_id,
-            args.get("role", "Nuevo Puesto"),
-            args.get("required_skills", ""),
-            args.get("urgency", "medium"),
-            args.get("rationale", ""),
+            args.get("title", "Reunión de Equipo"),
+            args.get("sim_date", "Día Actual"),
+            args.get("time_slot", "10:00 AM"),
+            args.get("attendees", "Todo el equipo"),
+            args.get("agenda", ""),
             datetime.utcnow().isoformat()
         ))
         conn.commit()
-        result = {"status": "requested", "hiring_request_id": req_id, "role": args.get("role")}
+        result = {"status": "scheduled", "meeting_id": evt_id, "title": args.get("title"), "date": args.get("sim_date")}
+
+    elif tool_name == "request_managerial_approval":
+        dec_id = f"dec-{int(time.time()*1000)}"
+        conn.execute("""
+        INSERT INTO managerial_decisions (id, workspace_id, title, description, impact_summary, status, response_comment, created_at)
+        VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?);
+        """, (
+            dec_id,
+            workspace_id,
+            args.get("title", "Decisión Gerencial"),
+            args.get("description", ""),
+            args.get("impact_summary", ""),
+            datetime.utcnow().isoformat()
+        ))
+        conn.commit()
+        result = {"status": "decision_requested", "decision_id": dec_id, "title": args.get("title")}
 
     elif tool_name == "generate_daily_standup_report":
         tasks = conn.execute("SELECT title, assignee_name, status, completed_hours, estimated_hours, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
@@ -189,20 +235,23 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     conn.commit()
     conn.close()
 
-    system_instruction = custom_system_prompt if custom_system_prompt and len(custom_system_prompt.strip()) > 10 else HERMES_SYSTEM_PROMPT
+    system_instruction = build_system_prompt_with_skills(workspace_id, custom_system_prompt)
 
-    # If no API key provided, execute intelligent rule-based simulation flow
+    # Fallback to local heuristic mode if no API key is provided
     if not api_key or len(api_key.strip()) < 10:
         return await run_simulated_fallback(workspace_id, user_message, system_instruction)
 
-    # Call Google AI Studio (Gemini 2.5 Flash / Gemma) with Function Calling
+    # Safe Google AI Studio API call (Pass key in Header to prevent leak in logs or query params)
     model_name = "gemini-2.5-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key.strip()}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key.strip()
+    }
 
-    # Build conversation context
+    # Fetch recent conversation context
     conn = get_db_connection()
-    # Fetch recent messages
-    recent_msgs = conn.execute("SELECT sender, content FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC LIMIT 15;", (workspace_id,)).fetchall()
+    recent_msgs = conn.execute("SELECT sender, content FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC LIMIT 12;", (workspace_id,)).fetchall()
     conn.close()
 
     contents = []
@@ -213,7 +262,6 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
             "parts": [{"text": m["content"]}]
         })
 
-    # Prepare request payload
     payload = {
         "system_instruction": {
             "parts": [{"text": system_instruction}]
@@ -230,37 +278,31 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     executed_tools = []
     tool_results = []
     final_text = ""
-    thinking_text = "Analizando contexto del proyecto, perfiles de talento y estado del tablero..."
+    thinking_text = "Evaluando requerimientos, habilidades activas y estado del equipo..."
 
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            # Turn 1
-            res = await client.post(url, json=payload)
-            res.raise_for_status()
-            data = res.json()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(url, headers=headers, json=payload)
+            if res.status_code != 200:
+                clean_err = f"API de Google respondió con código {res.status_code}"
+                return await run_simulated_fallback(workspace_id, user_message, system_instruction, error_msg=clean_err)
             
+            data = res.json()
             candidates = data.get("candidates", [])
             if not candidates:
-                raise Exception("No candidates returned from Gemini API")
+                return await run_simulated_fallback(workspace_id, user_message, system_instruction, error_msg="Respuesta vacía del modelo")
             
             content_resp = candidates[0].get("content", {})
             parts = content_resp.get("parts", [])
             
-            # Check for function calls
             func_calls = [p.get("functionCall") for p in parts if "functionCall" in p]
             text_parts = [p.get("text") for p in parts if "text" in p]
             
             if text_parts:
                 final_text = "\n".join(text_parts)
 
-            # Execute function calls if present
             if func_calls:
-                # Add model's tool calls to contents
-                contents.append({
-                    "role": "model",
-                    "parts": parts
-                })
-                
+                contents.append({"role": "model", "parts": parts})
                 tool_response_parts = []
                 for fc in func_calls:
                     fname = fc.get("name")
@@ -277,27 +319,21 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                         }
                     })
                 
-                # Send tool response back to Gemini for final response
-                contents.append({
-                    "role": "user",
-                    "parts": tool_response_parts
-                })
-
+                contents.append({"role": "user", "parts": tool_response_parts})
                 payload["contents"] = contents
-                res2 = await client.post(url, json=payload)
-                res2.raise_for_status()
-                data2 = res2.json()
                 
-                parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                final_text = "\n".join([p.get("text") for p in parts2 if "text" in p])
+                res2 = await client.post(url, headers=headers, json=payload)
+                if res2.status_code == 200:
+                    data2 = res2.json()
+                    parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                    final_text = "\n".join([p.get("text") for p in parts2 if "text" in p])
 
     except Exception as e:
-        print(f"[Gemini API Error] {e}")
-        # Fallback if API key fails or quota exceeded
-        return await run_simulated_fallback(workspace_id, user_message, system_instruction, error_msg=str(e))
+        clean_msg = "Intermitencia temporal en la conexión de IA"
+        return await run_simulated_fallback(workspace_id, user_message, system_instruction, error_msg=clean_msg)
 
     if not final_text:
-        final_text = "He procesado las acciones solicitadas y actualizado el tablero del proyecto."
+        final_text = "He procesado las acciones solicitadas y actualizado el proyecto."
 
     # Save Assistant message
     conn = get_db_connection()
@@ -333,23 +369,19 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     }
 
 async def run_simulated_fallback(workspace_id: str, user_message: str, system_prompt: str, error_msg: Optional[str] = None) -> Dict[str, Any]:
-    """Autonomous rule-based fallback if BYOK API key is not yet configured or fails."""
     conn = get_db_connection()
     user_lower = user_message.lower()
     
     executed_tools = []
     tool_results = []
-    thinking = "Ejecutando razonamiento PM heurístico basado en el estado del ATS y tareas..."
+    thinking = "Ejecutando razonamiento PM heurístico basado en habilidades activas y tablero..."
     
     if "planifica" in user_lower or "inicia" in user_lower or "comienza" in user_lower or "organiza" in user_lower:
-        # 1. Fetch talent pool
         t_res = execute_tool(workspace_id, "get_talent_pool", {})
         executed_tools.append({"tool": "get_talent_pool", "args": {}})
         tool_results.append({"tool": "get_talent_pool", "result": t_res})
         
         talent = t_res.get("talent_pool", [])
-        
-        # 2. Create foundational tasks based on available workers
         tasks_to_create = [
             {"title": "Arquitectura de Microservicios & Setup FastAPI", "role": "Backend Developer", "hours": 16.0, "prio": "high"},
             {"title": "Diseño de Interfaces & Onboarding KYC en React", "role": "Frontend Developer", "hours": 20.0, "prio": "high"},
@@ -359,7 +391,6 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         ]
         
         for t in tasks_to_create:
-            # Match talent by role
             assignee = "Ana Morales"
             for p in talent:
                 if t["role"].lower() in p["role"].lower():
@@ -368,7 +399,7 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
             
             args = {
                 "title": t["title"],
-                "description": f"Alcance crítico para el MVP según especificación ATS.",
+                "description": "Alcance crítico para el MVP según especificación ATS.",
                 "role_required": t["role"],
                 "estimated_hours": t["hours"],
                 "assignee_name": assignee,
@@ -377,8 +408,44 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
             c_res = execute_tool(workspace_id, "create_task", args)
             executed_tools.append({"tool": "create_task", "args": args})
             tool_results.append({"tool": "create_task", "result": c_res})
+
+        # Also schedule a sprint review meeting
+        m_args = {
+            "title": "Sprint Kickoff & Planning",
+            "sim_date": "12 Sep 2030",
+            "time_slot": "09:30 AM - 10:30 AM",
+            "attendees": "Todo el equipo",
+            "agenda": "Alineación de objetivos de MVP y asignación de tareas."
+        }
+        m_res = execute_tool(workspace_id, "schedule_meeting", m_args)
+        executed_tools.append({"tool": "schedule_meeting", "args": m_args})
+        tool_results.append({"tool": "schedule_meeting", "result": m_res})
         
-        final_text = f"¡Planificación del MVP completada con éxito! He analizado los {len(talent)} perfiles del ATS y asignado las 5 tareas estructurales en el tablero Kanban según la especialidad de cada desarrollador. Las tareas ya están en progreso en el flujo de trabajo."
+        final_text = f"¡Planificación del MVP completada con éxito! He analizado los {len(talent)} perfiles del ATS, asignado las tareas estructurales en el Kanban y agendado la reunión de Kickoff en el calendario."
+
+    elif "reunión" in user_lower or "reunion" in user_lower or "calendario" in user_lower or "agendar" in user_lower:
+        m_args = {
+            "title": "Checkpoint de Avance & Detección de Riesgos",
+            "sim_date": "Día 5 (16 Sep 2030)",
+            "time_slot": "10:00 AM - 10:45 AM",
+            "attendees": "Tech Lead, Backend & QA",
+            "agenda": "Revisión del estado de las integraciones y validación de endpoints."
+        }
+        m_res = execute_tool(workspace_id, "schedule_meeting", m_args)
+        executed_tools.append({"tool": "schedule_meeting", "args": m_args})
+        tool_results.append({"tool": "schedule_meeting", "result": m_res})
+        final_text = "He agendado la reunión en el calendario del sprint. Puedes consultarla en la pestaña **Calendario & Decisiones**."
+
+    elif "contratar" in user_lower or "decisión" in user_lower or "decision" in user_lower or "aprobar" in user_lower:
+        d_args = {
+            "title": "Aprobación de Contratación: Senior Mobile Developer",
+            "description": "El cliente solicitó incorporar soporte para app móvil nativa en React Native y el equipo actual está al 100% de capacidad en web y backend.",
+            "impact_summary": "Presupuesto estimado: +$4,200 USD / Permite cumplir el hito de lanzamiento en 3 semanas sin retrasos."
+        }
+        d_res = execute_tool(workspace_id, "request_managerial_approval", d_args)
+        executed_tools.append({"tool": "request_managerial_approval", "args": d_args})
+        tool_results.append({"tool": "request_managerial_approval", "result": d_res})
+        final_text = "He emitido una **Solicitud de Decisión Gerencial** para la contratación. Por favor, revisa la pestaña **Calendario & Decisiones** para aprobar o rechazar la solicitud."
 
     elif "standup" in user_lower or "daily" in user_lower or "estado" in user_lower or "cómo vamos" in user_lower:
         s_res = execute_tool(workspace_id, "generate_daily_standup_report", {})
@@ -388,26 +455,14 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         summary = s_res.get("standup_summary", [])
         lines = ["**Reporte de Daily Standup:**\n"]
         for s in summary:
-            lines.append(f"• **{s['assignee']}** en *{s['task']}*: {s['progress_percent']} completado [{s['status']}]")
+            lines.append(f"• **{s['assignee']}** en *{s['task']}*: {s['progress_percent']} completado")
         final_text = "\n".join(lines)
 
-    elif "contratar" in user_lower or "nuevo" in user_lower or "hiring" in user_lower:
-        args = {
-            "role": "Mobile Developer (React Native / iOS)",
-            "required_skills": "React Native, Swift, TypeScript, Mobile Security",
-            "urgency": "high",
-            "rationale": "El cliente solicitó soporte para aplicaciones móviles nativas y el equipo actual está 100% enfocado en el stack web/backend."
-        }
-        h_res = execute_tool(workspace_id, "request_new_hire", args)
-        executed_tools.append({"tool": "request_new_hire", "args": args})
-        tool_results.append({"tool": "request_new_hire", "result": h_res})
-        final_text = "He emitido una **Requisición Formal de Contratación** para un *Mobile Developer* con urgencia alta. Puedes ver los detalles en la pestaña de Contrataciones del panel lateral."
-
     else:
-        final_text = f"Entendido. Como PM del equipo, estoy monitoreando el avance del proyecto y los tiempos de entrega. Puedes pedirme: *'Planifica el MVP'*, *'Genera la Daily Standup'* o *'Revisa si necesitamos contratar gente'*."
+        final_text = f"Entendido. Como PM del equipo, estoy monitoreando el avance del proyecto, el calendario y las tareas. Puedes pedirme: *'Planifica el MVP'*, *'Genera la Daily Standup'*, *'Agenda una reunión de avance'* o *'Solicita aprobación para contratar'*."
 
     if error_msg:
-        final_text += f"\n\n*(Nota: Se usó modo de respaldo local debido a: {error_msg}. Verifica tu API Key en la barra superior).* "
+        final_text += f"\n\n*(Nota pedagógica: {error_msg}. Se aplicó el motor de respaldo local).* "
 
     # Save Assistant message
     agent_msg_id = f"msg-hermes-{int(time.time()*1000)}"

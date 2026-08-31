@@ -8,6 +8,7 @@ const pinForm = document.getElementById('pin-form');
 const pinInput = document.getElementById('pin-input');
 const pinError = document.getElementById('pin-error');
 const btnLogout = document.getElementById('btn-logout');
+const btnInstTheme = document.getElementById('btn-inst-theme');
 
 const instTimeDisplay = document.getElementById('inst-time-display');
 const instDayDisplay = document.getElementById('inst-day-display');
@@ -15,11 +16,19 @@ const instSpeedDisplay = document.getElementById('inst-speed-display');
 const instStatusLabel = document.getElementById('inst-status-label');
 const statActiveStudents = document.getElementById('stat-active-students');
 
-const customEventForm = document.getElementById('custom-event-form');
-const eventTitle = document.getElementById('event-title');
-const eventDesc = document.getElementById('event-desc');
+function initTheme() {
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (isDark) document.documentElement.classList.add('dark');
+
+  if (btnInstTheme) {
+    btnInstTheme.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+    });
+  }
+}
 
 function init() {
+  initTheme();
   if (instructorPin) {
     verifyAndUnlock(instructorPin);
   }
@@ -34,18 +43,6 @@ function init() {
     sessionStorage.removeItem('colima_instructor_pin');
     instructorPin = '';
     authScreen.classList.remove('hidden');
-  });
-
-  customEventForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const title = eventTitle.value.trim();
-    const desc = eventDesc.value.trim();
-    if (!title || !desc) return;
-
-    await injectEvent(title, desc, 'warning');
-    eventTitle.value = '';
-    eventDesc.value = '';
-    alert('Evento global emitido a todos los alumnos!');
   });
 }
 
@@ -69,7 +66,7 @@ async function verifyAndUnlock(pin) {
       pinError.classList.remove('hidden');
     }
   } catch (err) {
-    pinError.textContent = 'Error de conexión: ' + err.message;
+    pinError.textContent = 'Error: ' + err.message;
     pinError.classList.remove('hidden');
   }
 }
@@ -97,22 +94,19 @@ function renderClockState(state) {
   if (state.status === 'paused' || speed === 0) {
     instSpeedDisplay.textContent = '0x (Pausado)';
     instStatusLabel.textContent = 'PAUSADO';
-    instStatusLabel.className = 'text-xs uppercase font-bold tracking-widest text-slate-400';
+    instStatusLabel.className = 'text-[11px] uppercase font-bold tracking-widest text-slate-400';
   } else {
     instSpeedDisplay.textContent = `${speed}x Vel.`;
-    instStatusLabel.textContent = 'EN EJECUCIÓN CONTINUA';
-    instStatusLabel.className = 'text-xs uppercase font-bold tracking-widest text-emerald-400';
+    instStatusLabel.textContent = 'EN EJECUCIÓN';
+    instStatusLabel.className = 'text-[11px] uppercase font-bold tracking-widest text-emerald-600 dark:text-emerald-400';
   }
 
-  // Update speed button active styling
   document.querySelectorAll('.speed-btn').forEach(btn => {
     const s = parseFloat(btn.dataset.speed);
     if (s === speed) {
-      btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-500');
-      btn.classList.remove('bg-slate-800', 'text-slate-200');
+      btn.className = 'speed-btn bg-indigo-600 text-white border border-indigo-500 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm';
     } else {
-      btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-500');
-      btn.classList.add('bg-slate-800', 'text-slate-200');
+      btn.className = 'speed-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5';
     }
   });
 }
@@ -132,12 +126,11 @@ async function fetchTelemetry() {
 
 async function setSpeed(multiplier) {
   try {
-    const res = await fetch('/api/instructor/speed', {
+    await fetch('/api/instructor/speed', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin: instructorPin, speed_multiplier: multiplier })
     });
-    if (!res.ok) alert('Error al actualizar velocidad');
   } catch (e) {
     alert('Error: ' + e.message);
   }
@@ -145,26 +138,24 @@ async function setSpeed(multiplier) {
 
 async function stepDay() {
   try {
-    const res = await fetch('/api/instructor/step-day', {
+    await fetch('/api/instructor/step-day', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin: instructorPin })
     });
-    if (!res.ok) alert('Error avanzando día');
   } catch (e) {
     alert('Error: ' + e.message);
   }
 }
 
 async function resetClock() {
-  if (!confirm('¿Seguro que deseas reiniciar el reloj al Día 1 (12 Sep 2030)?')) return;
+  if (!confirm('¿Seguro que deseas reiniciar el reloj al Día 1?')) return;
   try {
-    const res = await fetch('/api/instructor/reset', {
+    await fetch('/api/instructor/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin: instructorPin })
     });
-    if (!res.ok) alert('Error reiniciando reloj');
   } catch (e) {
     alert('Error: ' + e.message);
   }
@@ -177,29 +168,29 @@ async function injectPreset(type) {
 
   if (type === 'sick') {
     title = 'Dev Backend con Licencia Médica';
-    desc = 'El desarrollador backend principal reporta baja por 3 días. Sus tareas asignadas no avanzarán hasta su recuperación.';
+    desc = 'El desarrollador backend reporta baja médica por 3 días. Tareas en riesgo.';
     sev = 'danger';
   } else if (type === 'scope') {
     title = 'Cambio de Alcance: Pasarela SPEI';
-    desc = 'El cliente solicitó con carácter de urgencia incorporar soporte bancario SPEI directo no considerado en el backlog inicial.';
+    desc = 'El cliente solicita soporte bancario SPEI directo urgente no presupuestado.';
     sev = 'warning';
   } else if (type === 'speedup') {
     title = 'Entrega Anticipada en Frontend';
-    desc = 'El equipo frontend completó la maquetación de interfaces con 40% de ahorro en horas estimadas.';
+    desc = 'Frontend concluye componentes 40% antes de lo estimado.';
     sev = 'info';
   } else if (type === 'outage') {
-    title = 'Fallo Crítico en Pasarela de Pagos (QA)';
-    desc = 'Las pruebas de integración detectaron un error 500 intermitente en el webhook de pagos que bloquea el pase a staging.';
+    title = 'Bug Crítico en QA';
+    desc = 'Fallo de seguridad en JWT detectado por QA bloquea el pase a staging.';
     sev = 'danger';
   }
 
   await injectEvent(title, desc, sev);
-  alert(`Evento "${title}" emitido a todos los alumnos!`);
+  alert(`Evento "${title}" emitido.`);
 }
 
 async function injectEvent(title, desc, severity) {
   try {
-    const res = await fetch('/api/instructor/inject-event', {
+    await fetch('/api/instructor/inject-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -209,11 +200,9 @@ async function injectEvent(title, desc, severity) {
         severity: severity
       })
     });
-    if (!res.ok) alert('Error inyectando evento');
   } catch (e) {
     alert('Error: ' + e.message);
   }
 }
 
-// Start
 init();

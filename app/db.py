@@ -15,11 +15,54 @@ def get_db_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
 
+DEFAULT_SKILLS = [
+    {
+        "id": "skill-staffing-ats",
+        "name": "Staffing & Matching ATS",
+        "icon": "fa-users-gear",
+        "description": "Analiza perfiles de candidatos en PDF/ATS y asigna tareas según seniority y stack técnico.",
+        "prompt_instructions": "Evalúa constantemente las habilidades del equipo en el ATS antes de asignar tareas. Asigna tareas críticas a desarrolladores Senior y tareas de soporte a perfiles Junior.",
+        "is_active": 1
+    },
+    {
+        "id": "skill-standup-metrics",
+        "name": "Daily Standup & Bloqueos",
+        "icon": "fa-chart-line",
+        "description": "Modera la sincronización diaria, detecta atrasos y calcula el avance del sprint.",
+        "prompt_instructions": "En cada reporte diario, resume qué hizo cada miembro, el porcentaje de avance y emite alertas inmediatas si alguna tarea está bloqueada.",
+        "is_active": 1
+    },
+    {
+        "id": "skill-calendar-meetings",
+        "name": "Calendario & Ceremonias Ágiles",
+        "icon": "fa-calendar-check",
+        "description": "Agenda automáticamente reuniones de Sprint Planning, Checkpoint y Demos según los hitos alcanzados.",
+        "prompt_instructions": "Cuando el sprint inicie o alcance hitos clave (50% de avance o incidencias mayores), usa la herramienta 'schedule_meeting' para convocar al equipo.",
+        "is_active": 1
+    },
+    {
+        "id": "skill-managerial-governance",
+        "name": "Decisiones & Aprobaciones Gerenciales",
+        "icon": "fa-scale-balanced",
+        "description": "Escala decisiones críticas (presupuesto, contrataciones, cambios de alcance) a la dirección antes de actuar.",
+        "prompt_instructions": "Ante cambios imprevistos de alcance o necesidad de contratar personal, NO tomes la decisión final solo. Usa 'request_managerial_approval' para pedir autorización al Gerente.",
+        "is_active": 1
+    },
+    {
+        "id": "skill-executive-briefing",
+        "name": "Minutas & Correo Ejecutivo",
+        "icon": "fa-envelope-open-text",
+        "description": "Redacta informes ejecutivos concisos y formales para directores y clientes.",
+        "prompt_instructions": "Redacta minutas estructuradas con formato ejecutivo: Objetivo, Avance %, Riesgos Principales y Próximos Pasos.",
+        "is_active": 1
+    }
+]
+
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Global Simulation State (Master Clock)
+    # Global Simulation State
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS global_simulation (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -39,7 +82,7 @@ def init_db():
         VALUES (1, '2030-09-12T09:00:00', 0.0, 'paused', ?, '[]');
         """, (now_ts,))
     
-    # Workspaces (Student Sandboxes)
+    # Workspaces
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
@@ -51,7 +94,7 @@ def init_db():
     );
     """)
 
-    # Talent Pool Profiles (ATS)
+    # Talent Pool (ATS)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS talent_profiles (
         id TEXT PRIMARY KEY,
@@ -89,6 +132,53 @@ def init_db():
     );
     """)
 
+    # Skills Hub
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS skills (
+        id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        icon TEXT NOT NULL DEFAULT 'fa-brain',
+        description TEXT NOT NULL,
+        prompt_instructions TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (id, workspace_id),
+        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+    );
+    """)
+
+    # Calendar Events
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS calendar_events (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        sim_date TEXT NOT NULL,
+        time_slot TEXT NOT NULL,
+        event_type TEXT NOT NULL DEFAULT 'meeting',
+        attendees TEXT NOT NULL,
+        agenda TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+    );
+    """)
+
+    # Managerial Decisions & Approvals
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS managerial_decisions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        impact_summary TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        response_comment TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE
+    );
+    """)
+
     # Hiring Requests
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS hiring_requests (
@@ -119,7 +209,7 @@ def init_db():
     );
     """)
 
-    # Agent Trajectories (Thinking, Tool Calling, Inspector)
+    # Agent Trajectories
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS agent_trajectories (
         id TEXT PRIMARY KEY,
@@ -135,5 +225,15 @@ def init_db():
     );
     """)
 
+    conn.commit()
+    conn.close()
+
+def ensure_workspace_skills(workspace_id: str):
+    conn = get_db_connection()
+    for s in DEFAULT_SKILLS:
+        conn.execute("""
+        INSERT OR IGNORE INTO skills (id, workspace_id, name, icon, description, prompt_instructions, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        """, (s["id"], workspace_id, s["name"], s["icon"], s["description"], s["prompt_instructions"], s["is_active"], datetime.utcnow().isoformat()))
     conn.commit()
     conn.close()

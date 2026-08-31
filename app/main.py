@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.db import init_db, get_db_connection
+from app.db import init_db, get_db_connection, ensure_workspace_skills
 from app.clock import sim_engine
 from app.generator_assets import generate_all_samples, SAMPLES_DIR
 from app.ats import parse_cv_pdf
@@ -30,14 +30,10 @@ def get_instructor_pin() -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB tables
     init_db()
-    # Generate downloadable sample PDFs and ZIP
     generate_all_samples()
-    # Start Simulation Background Clock
     loop_task = asyncio.create_task(sim_engine.run_loop())
     yield
-    # Shutdown
     sim_engine.is_running = False
     loop_task.cancel()
     try:
@@ -48,7 +44,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Colima — Asistentes PM Autónomos con IA",
     description="Portal de práctica interactiva para talleres de gestión de software con IA y agentes autónomos.",
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -60,7 +56,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Healthcheck endpoint (Infrastructural invariant)
 @app.get("/healthz")
 async def healthz():
     state = sim_engine.get_state()
@@ -72,7 +67,6 @@ async def healthz():
         "timestamp": datetime.utcnow().isoformat()
     }
 
-# ==================== SSE Clock Stream ====================
 @app.get("/api/simulation/stream")
 async def simulation_stream(request: Request):
     queue = asyncio.Queue()
@@ -80,7 +74,6 @@ async def simulation_stream(request: Request):
 
     async def event_generator():
         try:
-            # Send initial state immediately
             initial_state = sim_engine.get_state()
             yield f"data: {json.dumps({'type': 'clock_update', 'data': initial_state})}\n\n"
             
@@ -91,7 +84,6 @@ async def simulation_stream(request: Request):
                     msg = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield f"data: {json.dumps(msg)}\n\n"
                 except asyncio.TimeoutError:
-                    # Keep-alive heartbeat
                     yield ": ping\n\n"
         finally:
             sim_engine.remove_listener(queue)
@@ -132,7 +124,7 @@ def verify_pin(provided_pin: str):
 @app.post("/api/instructor/verify")
 async def instructor_verify(req: InstructorAuth):
     verify_pin(req.pin)
-    return {"status": "authenticated", "message": "Acceso de instructor autorizado."}
+    return {"status": "authenticated", "message": "Acceso autorizado."}
 
 @app.post("/api/instructor/speed")
 async def instructor_set_speed(req: SpeedRequest):
@@ -190,6 +182,7 @@ def ensure_workspace(workspace_id: str, student_name: str = "Alumno"):
         """, (workspace_id, student_name, datetime.utcnow().isoformat()))
         conn.commit()
     conn.close()
+    ensure_workspace_skills(workspace_id)
 
 @app.get("/api/workspaces/{workspace_id}")
 async def get_workspace_data(workspace_id: str, student_name: str = "Alumno"):
@@ -199,6 +192,9 @@ async def get_workspace_data(workspace_id: str, student_name: str = "Alumno"):
     ws = conn.execute("SELECT * FROM workspaces WHERE id = ?;", (workspace_id,)).fetchone()
     talent_rows = conn.execute("SELECT * FROM talent_profiles WHERE workspace_id = ? ORDER BY created_at ASC;", (workspace_id,)).fetchall()
     task_rows = conn.execute("SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at ASC;", (workspace_id,)).fetchall()
+    skills_rows = conn.execute("SELECT * FROM skills WHERE workspace_id = ? ORDER BY id ASC;", (workspace_id,)).fetchall()
+    cal_rows = conn.execute("SELECT * FROM calendar_events WHERE workspace_id = ? ORDER BY created_at DESC;", (workspace_id,)).fetchall()
+    dec_rows = conn.execute("SELECT * FROM managerial_decisions WHERE workspace_id = ? ORDER BY created_at DESC;", (workspace_id,)).fetchall()
     hiring_rows = conn.execute("SELECT * FROM hiring_requests WHERE workspace_id = ? ORDER BY created_at DESC;", (workspace_id,)).fetchall()
     msg_rows = conn.execute("SELECT * FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC;", (workspace_id,)).fetchall()
     traj_rows = conn.execute("SELECT * FROM agent_trajectories WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 10;", (workspace_id,)).fetchall()
@@ -252,6 +248,9 @@ async def get_workspace_data(workspace_id: str, student_name: str = "Alumno"):
         "workspace": dict(ws),
         "talent_pool": talent,
         "tasks": tasks,
+        "skills": [dict(s) for s in skills_rows],
+        "calendar_events": [dict(c) for c in cal_rows],
+        "managerial_decisions": [dict(d) for d in dec_rows],
         "hiring_requests": [dict(h) for h in hiring_rows],
         "messages": messages,
         "trajectories": trajectories
@@ -262,7 +261,6 @@ async def setup_demo_workspace(workspace_id: str):
     ensure_workspace(workspace_id)
     conn = get_db_connection()
     
-    # Preload the 5 standard profiles
     profiles = [
         {"name": "Ana Morales", "role": "Senior Fullstack Engineer", "seniority": "Senior", "skills": ["Python", "FastAPI", "React", "TypeScript", "PostgreSQL", "Docker"], "prod": 1.35},
         {"name": "Carlos Ruiz", "role": "Junior Frontend Developer", "seniority": "Junior", "skills": ["JavaScript", "HTML5", "CSS3", "React", "TailwindCSS"], "prod": 0.75},
@@ -310,6 +308,69 @@ async def upload_cv(workspace_id: str, file: UploadFile = File(...)):
         }
     }
 
+class SkillToggleRequest(BaseModel):
+    skill_id: str
+    is_active: bool
+
+@app.post("/api/workspaces/{workspace_id}/skills/toggle")
+async def toggle_skill(workspace_id: str, req: SkillToggleRequest):
+    ensure_workspace(workspace_id)
+    conn = get_db_connection()
+    conn.execute("""
+    UPDATE skills
+    SET is_active = ?
+    WHERE id = ? AND workspace_id = ?;
+    """, (1 if req.is_active else 0, req.skill_id, workspace_id))
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "skill_id": req.skill_id, "is_active": req.is_active}
+
+class SkillUpdateRequest(BaseModel):
+    skill_id: str
+    prompt_instructions: str
+
+@app.post("/api/workspaces/{workspace_id}/skills/update")
+async def update_skill_prompt(workspace_id: str, req: SkillUpdateRequest):
+    ensure_workspace(workspace_id)
+    conn = get_db_connection()
+    conn.execute("""
+    UPDATE skills
+    SET prompt_instructions = ?
+    WHERE id = ? AND workspace_id = ?;
+    """, (req.prompt_instructions, req.skill_id, workspace_id))
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+class DecisionResponseRequest(BaseModel):
+    status: str  # 'approved' or 'rejected'
+    comment: Optional[str] = None
+
+@app.post("/api/workspaces/{workspace_id}/decisions/{decision_id}/respond")
+async def respond_decision(workspace_id: str, decision_id: str, req: DecisionResponseRequest):
+    conn = get_db_connection()
+    conn.execute("""
+    UPDATE managerial_decisions
+    SET status = ?, response_comment = ?
+    WHERE id = ? AND workspace_id = ?;
+    """, (req.status, req.comment, decision_id, workspace_id))
+    
+    # Also add a message from Manager to the chat
+    action_label = "APROBADA ✅" if req.status == "approved" else "RECHAZADA ❌"
+    conn.execute("""
+    INSERT INTO chat_messages (id, workspace_id, sender, sender_name, content, message_type, metadata, created_at)
+    VALUES (?, ?, 'system', 'Dirección Gerencial', ?, 'alert', '{}', ?);
+    """, (
+        f"msg-gov-{int(datetime.utcnow().timestamp()*1000)}",
+        workspace_id,
+        f"La solicitud gerencial ha sido **{action_label}** por la Dirección.\nComentario: {req.comment or 'Sin comentarios adicionales.'}",
+        datetime.utcnow().isoformat()
+    ))
+
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
 class ChatRequest(BaseModel):
     message: str
     custom_system_prompt: Optional[str] = None
@@ -329,20 +390,16 @@ async def agent_chat(
     )
     return result
 
-# ==================== Sample Downloads ====================
 @app.get("/api/samples/{filename}")
 async def get_sample_file(filename: str):
     safe_name = os.path.basename(filename)
     fp = os.path.join(SAMPLES_DIR, safe_name)
     if not os.path.exists(fp):
-        # Regenerate if missing
         generate_all_samples()
     if os.path.exists(fp):
         return FileResponse(fp, filename=safe_name)
-    raise HTTPException(status_code=404, detail="Archivo de muestra no encontrado.")
+    raise HTTPException(status_code=404, detail="Archivo no encontrado.")
 
-# ==================== Static Pages ====================
-# Mount static assets
 app.mount("/static", StaticFiles(directory="/app/app/static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)

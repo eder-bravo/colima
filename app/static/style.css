@@ -1,4 +1,4 @@
-/* Custom Styles for Colima PM Sandbox */
+/* Clean Theme Styles for Colima */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
@@ -9,23 +9,23 @@ code, pre, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Custom Scrollbars */
+/* Custom Smooth Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.8);
+  background: rgba(148, 163, 184, 0.4);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 1);
+  background: rgba(100, 116, 139, 0.7);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -36,28 +36,13 @@ code, pre, .font-mono {
   scrollbar-width: none;
 }
 
-/* Kanban Cards Progress Animation */
 .task-progress-bar {
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Smooth Tab Transitions */
-.tab-active {
-  color: #60a5fa !important;
-  border-bottom: 2px solid #3b82f6 !important;
-}
-
-/* Message Markdown basic stylings */
 .chat-body p {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
 }
 .chat-body p:last-child {
   margin-bottom: 0;
-}
-.chat-body ul, .chat-body ol {
-  margin-left: 1.25rem;
-  margin-bottom: 0.5rem;
-}
-.chat-body li {
-  margin-bottom: 0.25rem;
 }

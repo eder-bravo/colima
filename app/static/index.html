@@ -1,131 +1,155 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<html lang="es" class="h-full">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Colima — Asistentes PM Autónomos con IA</title>
+  <!-- Tailwind CSS with darkMode: 'class' configured -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca'
+            }
+          }
+        }
+      }
+    }
+  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body class="h-full flex flex-col font-sans overflow-hidden bg-slate-950">
+<body class="h-full flex flex-col font-sans overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
 
-  <!-- TOP BAR: Simulation Clock & Global Controls -->
-  <header class="h-16 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0 z-30">
+  <!-- TOP BAR: Simulation Clock & Controls -->
+  <header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0 z-30 shadow-sm">
     <div class="flex items-center space-x-3">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-lg shadow-lg shadow-blue-500/20">
-        <i class="fa-solid fa-robot text-white"></i>
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center font-bold text-base text-white shadow-md shadow-indigo-500/20">
+        <i class="fa-solid fa-robot"></i>
       </div>
       <div>
-        <h1 class="font-bold text-sm md:text-base leading-tight text-white flex items-center gap-2">
-          Hermes PM <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Sandbox Taller</span>
+        <h1 class="font-bold text-sm leading-tight text-slate-900 dark:text-white flex items-center gap-2">
+          Hermes PM <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30">Sandbox</span>
         </h1>
-        <p class="text-xs text-slate-400">Asistentes PM Autónomos con IA</p>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">Taller: Asistentes PM Autónomos con IA</p>
       </div>
     </div>
 
-    <!-- Master Synchronized Clock Display -->
-    <div id="clock-badge" class="flex items-center space-x-3 bg-slate-800/90 border border-slate-700 px-4 py-1.5 rounded-full shadow-inner">
-      <span class="relative flex h-3 w-3">
+    <!-- Master Synchronized Clock -->
+    <div id="clock-badge" class="flex items-center space-x-2.5 bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 rounded-full">
+      <span class="relative flex h-2.5 w-2.5">
         <span id="clock-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-        <span id="clock-dot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+        <span id="clock-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
       </span>
-      <div class="text-center">
-        <span id="sim-day" class="text-xs font-bold text-indigo-300">Día 1</span>
-        <span class="text-slate-600 mx-1">•</span>
-        <span id="sim-time" class="text-xs font-mono font-semibold text-white">12 Sep 2030, 09:00 AM</span>
+      <div class="text-center text-xs">
+        <span id="sim-day" class="font-bold text-indigo-600 dark:text-indigo-400">Día 1</span>
+        <span class="text-slate-400 mx-1">•</span>
+        <span id="sim-time" class="font-mono font-medium text-slate-700 dark:text-slate-200">12 Sep 2030, 09:00 AM</span>
       </div>
-      <span id="sim-speed-badge" class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+      <span id="sim-speed-badge" class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
         Pausado
       </span>
     </div>
 
-    <!-- User Action Controls -->
+    <!-- User Action Controls & Theme Toggle -->
     <div class="flex items-center space-x-2">
-      <button id="btn-samples" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
-        <i class="fa-solid fa-file-arrow-down text-blue-400"></i>
-        <span class="hidden sm:inline">Material / CVs PDF</span>
+      <button id="btn-samples" class="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-file-pdf text-red-500"></i>
+        <span class="hidden md:inline">Material / CVs</span>
       </button>
 
-      <button id="btn-quick-load" class="text-xs bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
-        <i class="fa-solid fa-bolt text-indigo-400"></i>
-        <span class="hidden sm:inline">Cargar Demo (5 CVs)</span>
+      <button id="btn-quick-load" class="text-xs bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/40 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-bolt text-indigo-500"></i>
+        <span class="hidden md:inline">Cargar Demo (5 CVs)</span>
       </button>
 
-      <button id="btn-settings" class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg font-medium shadow-md shadow-blue-600/20 flex items-center gap-1.5 transition">
+      <button id="btn-settings" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-medium shadow-sm flex items-center gap-1.5 transition">
         <i class="fa-solid fa-key"></i>
-        <span id="api-key-status-text">API Key AI Studio</span>
+        <span id="api-key-status-text" class="hidden sm:inline">API Key</span>
+      </button>
+
+      <!-- System / Theme Toggle Button -->
+      <button id="btn-theme-toggle" title="Cambiar Tema (Sistema / Claro / Oscuro)" class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+        <i id="theme-icon" class="fa-solid fa-circle-half-stroke text-xs"></i>
       </button>
     </div>
   </header>
 
-  <!-- MAIN 3-COLUMN WORKSPACE -->
+  <!-- MAIN 2-PANE WORKSPACE: LEFT CHAT (30%) + RIGHT STAGE (70%) -->
   <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
 
-    <!-- COLUMN 1: Chat PM Hermes (3.5 cols) -->
-    <section class="lg:col-span-4 border-r border-slate-800 flex flex-col bg-slate-900/40 h-full overflow-hidden">
+    <!-- LEFT PANE: Chat PM Hermes (3.5 cols) -->
+    <section class="lg:col-span-4 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-slate-900/40 h-full overflow-hidden">
       <!-- Chat Header -->
-      <div class="p-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 flex items-center justify-between">
         <div class="flex items-center space-x-2">
-          <div class="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-xs font-bold">
+          <div class="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">
             <i class="fa-solid fa-comments"></i>
           </div>
           <div>
-            <h2 class="text-xs font-bold text-white uppercase tracking-wider">Canal PM — Hermes</h2>
-            <p class="text-[10px] text-emerald-400 flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Activo & Autónomo
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">Canal PM — Hermes</h2>
+            <p class="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Asistente Autónomo Activo
             </p>
           </div>
         </div>
-        <button id="btn-clear-chat" title="Limpiar conversación" class="text-slate-500 hover:text-slate-300 text-xs p-1">
+        <button id="btn-clear-chat" title="Limpiar conversación" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs p-1">
           <i class="fa-solid fa-rotate-right"></i>
         </button>
       </div>
 
-      <!-- Quick Action Starters -->
-      <div class="p-2 border-b border-slate-800/80 bg-slate-950/40 flex gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
-        <button class="quick-prompt whitespace-nowrap bg-slate-800/80 hover:bg-indigo-950/60 hover:border-indigo-500/50 text-slate-300 border border-slate-700/60 px-2.5 py-1 rounded-full transition">
+      <!-- Quick Action Chips -->
+      <div class="p-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 flex gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
+        <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full transition">
           🚀 Planifica el MVP
         </button>
-        <button class="quick-prompt whitespace-nowrap bg-slate-800/80 hover:bg-indigo-950/60 hover:border-indigo-500/50 text-slate-300 border border-slate-700/60 px-2.5 py-1 rounded-full transition">
+        <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full transition">
           📊 Daily Standup
         </button>
-        <button class="quick-prompt whitespace-nowrap bg-slate-800/80 hover:bg-indigo-950/60 hover:border-indigo-500/50 text-slate-300 border border-slate-700/60 px-2.5 py-1 rounded-full transition">
-          ⚠️ Resolver Bloqueos
+        <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full transition">
+          📅 Agenda Checkpoint
         </button>
-        <button class="quick-prompt whitespace-nowrap bg-slate-800/80 hover:bg-indigo-950/60 hover:border-indigo-500/50 text-slate-300 border border-slate-700/60 px-2.5 py-1 rounded-full transition">
-          👥 Solicitar Contratación
+        <button class="quick-prompt whitespace-nowrap bg-slate-100 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full transition">
+          👥 Pedir Aprobación
         </button>
       </div>
 
       <!-- Messages Stream -->
-      <div id="chat-messages" class="flex-1 p-3 overflow-y-auto space-y-3 font-sans text-xs">
+      <div id="chat-messages" class="flex-1 p-3.5 overflow-y-auto space-y-3 font-sans text-xs">
         <!-- Initial Welcome Message -->
         <div class="flex items-start space-x-2.5">
-          <div class="w-7 h-7 rounded-lg bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-blue-400 font-bold shrink-0">
+          <div class="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 text-xs">
             H
           </div>
-          <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl rounded-tl-sm p-3 max-w-[85%] text-slate-200 shadow-sm leading-relaxed">
-            <p class="font-semibold text-blue-400 mb-1">¡Hola! Soy Hermes, tu Asistente PM Autónomo.</p>
-            <p>Estoy listo para gestionar el proyecto. Puedes subir los **CVs en PDF** de tu equipo en el panel derecho o presionar **"Cargar Demo (5 CVs)"**. Luego pídeme: *"Planifica el MVP con el equipo"* y comenzaré a asignar tareas y estimar tiempos.</p>
+          <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm p-3 max-w-[88%] text-slate-700 dark:text-slate-200 shadow-sm leading-relaxed">
+            <p class="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">¡Hola! Soy Hermes, tu Asistente PM Autónomo.</p>
+            <p>Estoy listo para gestionar el proyecto. Puedes cargar los <b>5 CVs de prueba</b> o subir tus propios PDFs. Luego pídeme: <i>"Planifica el MVP"</i> y organizaré las tareas en el tablero Kanban y el calendario.</p>
           </div>
         </div>
       </div>
 
       <!-- Chat Input Composer -->
-      <div class="p-3 border-t border-slate-800 bg-slate-900/90">
+      <div class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90">
         <form id="chat-form" class="flex items-center space-x-2">
           <input
             type="text"
             id="chat-input"
-            placeholder="Escribe una instrucción a Hermes (ej. 'Planifica el sprint')..."
-            class="flex-1 bg-slate-950 border border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none transition"
+            placeholder="Instrucción a Hermes (ej. 'Planifica el sprint')..."
+            class="flex-1 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 outline-none transition"
             autocomplete="off"
           />
           <button
             type="submit"
             id="chat-submit"
-            class="bg-blue-600 hover:bg-blue-500 text-white w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-blue-600/30 transition disabled:opacity-50"
+            class="bg-indigo-600 hover:bg-indigo-500 text-white w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition disabled:opacity-50"
           >
             <i class="fa-solid fa-paper-plane text-xs"></i>
           </button>
@@ -133,125 +157,145 @@
       </div>
     </section>
 
-    <!-- COLUMN 2: Live Kanban Board (5 cols) -->
-    <section class="lg:col-span-5 border-r border-slate-800 flex flex-col bg-slate-950 h-full overflow-hidden">
-      <!-- Kanban Header -->
-      <div class="p-3 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
-        <div class="flex items-center space-x-2">
-          <i class="fa-solid fa-chart-kanban text-blue-400 text-sm"></i>
-          <h2 class="text-xs font-bold text-white uppercase tracking-wider">Tablero Kanban en Vivo</h2>
-        </div>
-        <div class="flex items-center space-x-3 text-[11px] text-slate-400">
-          <span>Total: <b id="stat-tasks-total" class="text-white">0</b></span>
-          <span>En Progreso: <b id="stat-tasks-progress" class="text-blue-400">0</b></span>
-          <span>Completadas: <b id="stat-tasks-done" class="text-emerald-400">0</b></span>
-        </div>
+    <!-- RIGHT PANE: Main Stage with Clean Tabs (8.5 cols) -->
+    <section class="lg:col-span-8 flex flex-col bg-slate-50 dark:bg-slate-950 h-full overflow-hidden">
+      
+      <!-- Stage Navigation Tabs -->
+      <div class="h-12 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 px-4 flex items-center space-x-1 shrink-0">
+        <button onclick="switchStage('kanban')" id="tab-stage-kanban" class="stage-tab font-semibold text-xs px-3.5 py-2 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5">
+          <i class="fa-solid fa-chart-kanban"></i> Tablero Kanban
+        </button>
+        <button onclick="switchStage('skills')" id="tab-stage-skills" class="stage-tab font-medium text-xs px-3.5 py-2 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-brain"></i> Habilidades (<span id="active-skills-count">5</span>)
+        </button>
+        <button onclick="switchStage('talent')" id="tab-stage-talent" class="stage-tab font-medium text-xs px-3.5 py-2 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-users"></i> Talent ATS (<span id="talent-count-badge">0</span>)
+        </button>
+        <button onclick="switchStage('calendar')" id="tab-stage-calendar" class="stage-tab font-medium text-xs px-3.5 py-2 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-check"></i> Calendario & Decisiones
+        </button>
+        <button onclick="switchStage('inspector')" id="tab-stage-inspector" class="stage-tab font-medium text-xs px-3.5 py-2 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-microchip"></i> Inspector
+        </button>
       </div>
 
-      <!-- Kanban Columns Container -->
-      <div class="flex-1 p-3 overflow-x-auto grid grid-cols-4 gap-3 bg-slate-950/80">
+      <!-- STAGE 1: KANBAN BOARD -->
+      <div id="stage-kanban" class="stage-view flex-1 p-4 overflow-x-auto grid grid-cols-4 gap-4">
         
-        <!-- Backlog / To Do -->
-        <div class="flex flex-col bg-slate-900/70 border border-slate-800/80 rounded-xl p-2.5 overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
-            <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-slate-500"></span> Backlog
+        <!-- Backlog -->
+        <div class="flex flex-col bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+            <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-slate-400"></span> Backlog
             </span>
-            <span id="count-backlog" class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">0</span>
+            <span id="count-backlog" class="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold text-slate-500">0</span>
           </div>
-          <div id="col-backlog" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          <div id="col-backlog" class="flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
         </div>
 
         <!-- In Progress -->
-        <div class="flex flex-col bg-slate-900/70 border border-slate-800/80 rounded-xl p-2.5 overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
-            <span class="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+        <div class="flex flex-col bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+            <span class="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> En Progreso
             </span>
-            <span id="count-in_progress" class="text-[10px] bg-blue-900/40 text-blue-400 px-1.5 py-0.5 rounded">0</span>
+            <span id="count-in_progress" class="text-[10px] bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded font-semibold">0</span>
           </div>
-          <div id="col-in_progress" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          <div id="col-in_progress" class="flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
         </div>
 
-        <!-- Review / QA -->
-        <div class="flex flex-col bg-slate-900/70 border border-slate-800/80 rounded-xl p-2.5 overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
-            <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+        <!-- Review -->
+        <div class="flex flex-col bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+            <span class="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-amber-500"></span> En Revisión
             </span>
-            <span id="count-review" class="text-[10px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded">0</span>
+            <span id="count-review" class="text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded font-semibold">0</span>
           </div>
-          <div id="col-review" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          <div id="col-review" class="flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
         </div>
 
-        <!-- Completed -->
-        <div class="flex flex-col bg-slate-900/70 border border-slate-800/80 rounded-xl p-2.5 overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
-            <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+        <!-- Done -->
+        <div class="flex flex-col bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Completado
             </span>
-            <span id="count-done" class="text-[10px] bg-emerald-900/40 text-emerald-400 px-1.5 py-0.5 rounded">0</span>
+            <span id="count-done" class="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded font-semibold">0</span>
           </div>
-          <div id="col-done" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          <div id="col-done" class="flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
         </div>
 
       </div>
-    </section>
 
-    <!-- COLUMN 3: ATS Talent Pool & Inspector (3.5 cols) -->
-    <section class="lg:col-span-3 flex flex-col bg-slate-900/50 h-full overflow-hidden">
-      <!-- Tabs Navigation -->
-      <div class="flex border-b border-slate-800 bg-slate-900/80 text-xs">
-        <button id="tab-btn-talent" class="flex-1 py-3 font-semibold text-blue-400 border-b-2 border-blue-500 text-center transition">
-          <i class="fa-solid fa-users mr-1"></i> Talent ATS (<span id="talent-count-badge">0</span>)
-        </button>
-        <button id="tab-btn-inspector" class="flex-1 py-3 font-semibold text-slate-400 hover:text-slate-200 text-center transition">
-          <i class="fa-solid fa-brain mr-1"></i> Inspector
-        </button>
-        <button id="tab-btn-hires" class="flex-1 py-3 font-semibold text-slate-400 hover:text-slate-200 text-center transition">
-          <i class="fa-solid fa-user-plus mr-1"></i> Contratos (<span id="hires-count-badge">0</span>)
-        </button>
+      <!-- STAGE 2: SKILLS HUB (CONFIGURACIÓN DE HABILIDADES) -->
+      <div id="stage-skills" class="stage-view flex-1 p-6 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <i class="fa-solid fa-brain text-indigo-500"></i> Skills Hub — Habilidades Declarativas del PM
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Hermes adapta su razonamiento combinando los prompts e instrucciones de cada habilidad activa en tiempo real.
+            </p>
+          </div>
+        </div>
+
+        <div id="skills-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Populated by JS -->
+        </div>
       </div>
 
-      <!-- TAB 1: TALENT ATS POOL -->
-      <div id="tab-content-talent" class="flex-1 p-3 overflow-y-auto flex flex-col space-y-3">
+      <!-- STAGE 3: TALENT POOL (ATS) -->
+      <div id="stage-talent" class="stage-view flex-1 p-6 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-4">
         <!-- Drag & Drop PDF Zone -->
-        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-blue-500 bg-slate-950/60 rounded-xl p-4 text-center cursor-pointer transition">
+        <div id="dropzone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 bg-white dark:bg-slate-900/60 rounded-2xl p-6 text-center cursor-pointer transition shadow-sm">
           <input type="file" id="cv-file-input" accept=".pdf" class="hidden" multiple />
-          <i class="fa-solid fa-cloud-arrow-up text-2xl text-blue-400 mb-1"></i>
-          <p class="text-xs font-semibold text-slate-200">Arrastra aquí tus CVs en PDF</p>
-          <p class="text-[10px] text-slate-500 mt-0.5">Parser ATS automático (Extrae rol, seniority y skills)</p>
+          <i class="fa-solid fa-cloud-arrow-up text-3xl text-indigo-500 mb-2"></i>
+          <p class="text-xs font-bold text-slate-800 dark:text-slate-200">Arrastra aquí tus CVs en PDF</p>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">El parser ATS extraerá rol, seniority y stack técnico automáticamente.</p>
         </div>
 
-        <!-- Talent Cards List -->
-        <div id="talent-list" class="space-y-2">
-          <!-- Populated via JS -->
+        <div id="talent-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Populated by JS -->
         </div>
       </div>
 
-      <!-- TAB 2: AGENT INSPECTOR (Thinking & Trajectories) -->
-      <div id="tab-content-inspector" class="flex-1 p-3 overflow-y-auto hidden space-y-3 text-xs">
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
-          <h3 class="text-xs font-bold text-indigo-400 uppercase mb-1 flex items-center gap-1.5">
-            <i class="fa-solid fa-microchip"></i> Loop Agéntico (ReAct)
+      <!-- STAGE 4: CALENDAR & MANAGERIAL DECISIONS -->
+      <div id="stage-calendar" class="stage-view flex-1 p-6 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-6">
+        
+        <!-- Managerial Approvals Section -->
+        <div class="space-y-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-scale-balanced text-amber-500"></i> Aprobaciones y Decisiones de la Dirección
           </h3>
-          <p class="text-[11px] text-slate-400 mb-2">Traza en tiempo real de las decisiones, razonamiento interno y llamadas de herramientas ejecutadas por Hermes.</p>
+          <div id="decisions-container" class="space-y-3">
+            <!-- Populated by JS -->
+          </div>
         </div>
-        <div id="trajectories-list" class="space-y-2 font-mono text-[11px]">
-          <!-- Populated via JS -->
+
+        <!-- Calendar Events Section -->
+        <div class="space-y-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-days text-indigo-500"></i> Calendario de Ceremonias & Reuniones
+          </h3>
+          <div id="calendar-container" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Populated by JS -->
+          </div>
         </div>
+
       </div>
 
-      <!-- TAB 3: HIRING REQUESTS -->
-      <div id="tab-content-hires" class="flex-1 p-3 overflow-y-auto hidden space-y-2.5 text-xs">
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
-          <h3 class="text-xs font-bold text-amber-400 uppercase mb-1 flex items-center gap-1.5">
-            <i class="fa-solid fa-briefcase"></i> Requisiciones de Contratación
+      <!-- STAGE 5: INSPECTOR DE TRAZAS -->
+      <div id="stage-inspector" class="stage-view flex-1 p-6 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-3 font-mono text-xs">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm font-sans">
+          <h3 class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase mb-1">
+            <i class="fa-solid fa-microchip mr-1"></i> Traza de Razonamiento Agéntico (ReAct)
           </h3>
-          <p class="text-[11px] text-slate-400">Puestos solicitados automáticamente por Hermes cuando el equipo no cuenta con las habilidades requeridas.</p>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400">Inspecciona el razonamiento interno y las llamadas a herramientas con argumentos JSON de cada turno.</p>
         </div>
-        <div id="hires-list" class="space-y-2">
-          <!-- Populated via JS -->
+        <div id="trajectories-list" class="space-y-3">
+          <!-- Populated by JS -->
         </div>
       </div>
 
@@ -259,95 +303,87 @@
 
   </main>
 
-  <!-- MODAL: BYOK API Key & Settings -->
-  <div id="settings-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 class="font-bold text-base text-white flex items-center gap-2">
-          <i class="fa-solid fa-key text-blue-400"></i> Configuración de Google AI Studio (BYOK)
+  <!-- MODAL: SKILL PROMPT VIEWER / EDITOR -->
+  <div id="skill-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 id="skill-modal-title" class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="fa-solid fa-brain text-indigo-500"></i> Prompt de la Habilidad
         </h3>
-        <button id="modal-close-btn" class="text-slate-400 hover:text-white text-lg">
+        <button onclick="closeSkillModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
-      <div class="space-y-3 text-xs text-slate-300">
-        <p>Para que Hermes ejecute razonamiento y *Function Calling* en vivo, ingresa tu API Key gratuita de Google AI Studio.</p>
+      <div class="space-y-3 text-xs">
+        <p class="text-slate-500 dark:text-slate-400">Instrucciones inyectadas en el prompt de sistema de Hermes para esta habilidad:</p>
+        <textarea
+          id="skill-modal-prompt"
+          rows="4"
+          class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-slate-100 font-mono outline-none focus:border-indigo-500"
+        ></textarea>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="saveSkillPrompt()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition">
+          Guardar Cambios
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: BYOK API Key -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="fa-solid fa-key text-indigo-500"></i> Configurar Google AI Studio (BYOK)
+        </h3>
+        <button id="modal-close-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+        <p>Ingresa tu API Key gratuita de Google AI Studio para habilitar el modelo <b>Gemini 2.5 Flash</b> con Function Calling.</p>
         
         <div>
-          <label class="block font-semibold text-slate-200 mb-1">Google AI Studio API Key:</label>
+          <label class="block font-semibold text-slate-700 dark:text-slate-200 mb-1">API Key:</label>
           <input
             type="password"
             id="api-key-input"
             placeholder="AIzaSy..."
-            class="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white outline-none"
           />
-          <p class="text-[10px] text-slate-500 mt-1">Tu clave se guarda únicamente en tu navegador (LocalStorage). Cero costo centralizado.</p>
-        </div>
-
-        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
-          <span class="font-semibold text-slate-300">¿Cómo obtenerla gratis?</span>
-          <ol class="list-decimal list-inside text-slate-400 mt-1 space-y-1">
-            <li>Entra a <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-400 underline">aistudio.google.com</a></li>
-            <li>Inicia sesión con tu cuenta de Google.</li>
-            <li>Haz clic en <b>"Create API Key"</b> y pégala aquí.</li>
-          </ol>
+          <p class="text-[10px] text-slate-400 mt-1">Se almacena exclusivamente en tu navegador (LocalStorage).</p>
         </div>
       </div>
 
-      <div class="flex justify-end space-x-2 pt-2 border-t border-slate-800">
-        <button id="btn-save-key" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-lg shadow-blue-600/30 transition">
+      <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button id="btn-save-key" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition">
           Guardar y Conectar
         </button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: Download Sample Materials -->
-  <div id="samples-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 class="font-bold text-base text-white flex items-center gap-2">
-          <i class="fa-solid fa-file-pdf text-red-400"></i> Materiales del Taller (PDFs ATS)
+  <!-- MODAL: Samples -->
+  <div id="samples-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="fa-solid fa-file-pdf text-red-500"></i> Descargar CVs de Prueba
         </h3>
-        <button id="samples-close-btn" class="text-slate-400 hover:text-white text-lg">
+        <button id="samples-close-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
-      <p class="text-xs text-slate-300">Descarga los currículums de prueba en formato ATS y el brief del proyecto para simular la carga manual en la plataforma:</p>
-
       <div class="space-y-2 text-xs">
-        <a href="/api/samples/taller_cvs_pack.zip" download class="block bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 p-3 rounded-xl text-indigo-200 font-semibold flex items-center justify-between transition">
+        <a href="/api/samples/taller_cvs_pack.zip" download class="block bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/40 p-3 rounded-xl text-indigo-700 dark:text-indigo-300 font-semibold flex items-center justify-between transition">
           <span><i class="fa-solid fa-file-zipper mr-2"></i> Descargar Pack Completo (.ZIP)</span>
           <i class="fa-solid fa-download"></i>
         </a>
-        <div class="border-t border-slate-800 my-2 pt-2 space-y-1.5 text-[11px] text-slate-400">
-          <div class="flex justify-between items-center py-1">
-            <span>1. Ana Morales (Senior Fullstack)</span>
-            <a href="/api/samples/1_ana_morales_senior_fullstack.pdf" download class="text-blue-400 hover:underline">Descargar PDF</a>
-          </div>
-          <div class="flex justify-between items-center py-1">
-            <span>2. Carlos Ruiz (Junior Frontend)</span>
-            <a href="/api/samples/2_carlos_ruiz_junior_frontend.pdf" download class="text-blue-400 hover:underline">Descargar PDF</a>
-          </div>
-          <div class="flex justify-between items-center py-1">
-            <span>3. Lucía Méndez (Senior QA)</span>
-            <a href="/api/samples/3_lucia_mendez_senior_qa_automation.pdf" download class="text-blue-400 hover:underline">Descargar PDF</a>
-          </div>
-          <div class="flex justify-between items-center py-1">
-            <span>4. Roberto Silva (DevOps Cloud)</span>
-            <a href="/api/samples/4_roberto_silva_devops_cloud.pdf" download class="text-blue-400 hover:underline">Descargar PDF</a>
-          </div>
-          <div class="flex justify-between items-center py-1">
-            <span>5. Diego Torres (Mid Backend)</span>
-            <a href="/api/samples/5_diego_torres_mid_backend.pdf" download class="text-blue-400 hover:underline">Descargar PDF</a>
-          </div>
-          <div class="flex justify-between items-center py-1 font-semibold text-slate-300">
-            <span>📄 Project Brief: Fintech MVP</span>
-            <a href="/api/samples/brief_fintech_microlending_mvp.pdf" download class="text-blue-400 hover:underline">Descargar PDF</a>
-          </div>
-        </div>
       </div>
     </div>
   </div>
