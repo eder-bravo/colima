@@ -9,11 +9,13 @@ services:
       APP_ENV: production
       DATABASE_PATH: /app/data/colima.db
       INSTRUCTOR_PIN_FILE: /run/secrets/instructor_pin
+      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
       SAMPLES_DIR: /app/app/static/samples
       TZ: America/Monterrey
     volumes:
       - /srv/data/colima:/app/data
       - /srv/secrets/colima-instructor-pin:/run/secrets/instructor_pin:ro
+      - /srv/secrets/colima-gemini-key:/run/secrets/gemini_api_key:ro
     networks:
       edge:
         aliases:

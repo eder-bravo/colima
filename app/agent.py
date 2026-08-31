@@ -515,22 +515,33 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
 
     system_instruction = build_system_prompt_with_skills(workspace_id, custom_system_prompt)
 
-    # If no API key provided, use dynamic smart fallback
-    if not api_key or len(api_key.strip()) < 10:
+    # Resolve API key: header > secret file > env var
+    resolved_key = (api_key or "").strip()
+    if not resolved_key or len(resolved_key) < 10:
+        import os
+        secret_file = os.environ.get("GEMINI_API_KEY_FILE", "/run/secrets/gemini_api_key")
+        if os.path.exists(secret_file):
+            try:
+                with open(secret_file, "r") as f:
+                    resolved_key = f.read().strip()
+            except Exception:
+                pass
+        if not resolved_key:
+            resolved_key = os.environ.get("GEMINI_API_KEY", "").strip()
+
+    # If still no API key, use dynamic smart fallback
+    if not resolved_key or len(resolved_key) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Primary: gemma-4-26b-a4b-it (conversational, as requested by instructor)
-    # Tool-calling fallback: gemini-3.6-flash (supports native function declarations)
+    # Models: gemini-2.5-flash (primary, native tools & chat) > gemini-2.0-flash > gemma-4-26b-a4b-it
     CANDIDATE_MODELS = [
-        "gemma-4-26b-a4b-it",
-        "gemma-4-31b-it",
-        "gemini-3.6-flash",
-        "gemini-2.5-flash-preview-05-20",
-        "gemini-1.5-flash"
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemma-4-26b-a4b-it"
     ]
     headers = {
         "Content-Type": "application/json",
-        "x-goog-api-key": api_key.strip()
+        "x-goog-api-key": resolved_key
     }
 
     conn = get_db_connection()
