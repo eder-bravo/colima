@@ -424,6 +424,9 @@ def strip_thinking_tokens(text: str) -> str:
 
     # Numbered reasoning lines: "1. Acknowledge", "2. Briefly", etc. (only in reasoning context)
     NUMBERED_REASONING = re.compile(r'^\d+\.\s+[A-Z][a-z]')
+    # *Self-Correction:*, *Persona:*, *   Traits:*, etc. — Gemma's meta bullets
+    STAR_META = re.compile(r'^\*[\s]*[A-Z][a-zA-Z\s\-]+[:\*]')
+    STAR_BULLET_TRAIT = re.compile(r'^\*\s{2,}[A-Z][a-z]+[\s:]')  # *   Persona: / *   Traits:
 
     def is_reasoning_line(line: str) -> bool:
         stripped = line.strip()
@@ -438,6 +441,14 @@ def strip_thinking_tokens(text: str) -> str:
         if NUMBERED_REASONING.match(stripped) and not any(
             c in stripped for c in ['¡', '¿', 'á', 'é', 'í', 'ó', 'ú', 'ñ', 'Ñ']
         ):
+            return True
+        # Drop *Self-Correction:* / *Note:* / *Correction:* lines
+        if STAR_META.match(stripped) and not any(
+            c in stripped for c in ['¡', '¿', 'á', 'é', 'í', 'ó', 'ú', 'ñ', 'Ñ']
+        ):
+            return True
+        # Drop *   Persona: / *   Role: / *   Traits: Gemma system prompt bullet echoes
+        if STAR_BULLET_TRAIT.match(stripped):
             return True
         return False
 
@@ -475,8 +486,19 @@ def strip_thinking_tokens(text: str) -> str:
                         if norm and norm not in seen_normalized:
                             seen_normalized.add(norm)
                             deduped.append(line)
-                    return '\n'.join(deduped).strip()
+                    final_block = '\n'.join(deduped).strip()
+                    # Strip wrapping quotes Gemma sometimes puts around its final answer
+                    if final_block.startswith('"') and final_block.endswith('"'):
+                        final_block = final_block[1:-1].strip()
+                    elif final_block.startswith("'") and final_block.endswith("'"):
+                        final_block = final_block[1:-1].strip()
+                    return final_block
 
+    # Final cleanup: strip wrapping quotes
+    if result.startswith('"') and result.endswith('"'):
+        result = result[1:-1].strip()
+    elif result.startswith("'") and result.endswith("'"):
+        result = result[1:-1].strip()
     return result if result else text.strip()
 
 
