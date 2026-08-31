@@ -378,6 +378,94 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
     conn.close()
     return result
 
+def strip_thinking_tokens(text: str) -> str:
+    """
+    Gemma outputs its reasoning before the final response. This function
+    surgically extracts only the final user-facing message.
+
+    Strategy:
+    1. Strip <think>...</think> explicit blocks.
+    2. Split into paragraphs (double-newline).
+    3. Drop paragraphs that are clearly model reasoning (English meta-commentary).
+    4. From the remaining text, drop line-by-line reasoning lines.
+    5. Return only the clean conversational paragraphs.
+    """
+    import re
+
+    if not text:
+        return text
+
+    # Remove explicit think blocks
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # Reasoning line prefixes that Gemma outputs (English internal monologue)
+    REASONING_LINE_PREFIXES = [
+        'the user said', 'the user is', 'the user ask', 'the user want',
+        'the user might', 'the user seem', 'the user has',
+        'as hermes', 'as a pm', 'as the pm', 'as an ai', 'as a technical pm',
+        'i should', "i'll ", 'i will ', 'i need to ', 'i must ',
+        'i already', 'i can ', 'i am hermes',
+        'plan:', 'plan:\n',
+        '* user says:', '* context:', '* goal:', '* tone:', '* constraint:',
+        '* action:', '* direct?', '* concise?', '* friendly?',
+        '* action-oriented?', '* no tool', '* current state:',
+        '* reasoning:', '* final response:', '* response:',
+        'step 1:', 'step 2:', 'step 3:',
+        'response strategy:', 'my response:', 'response:',
+        'reasoning:', 'thinking:', 'analysis:',
+        'maintaining the persona', 'maintaining persona',
+        'this is a greeting', 'this is a simple',
+        "here's my response", 'here is my response',
+    ]
+
+    # Numbered reasoning lines: "1. Acknowledge", "2. Briefly", etc. (only in reasoning context)
+    NUMBERED_REASONING = re.compile(r'^\d+\.\s+[A-Z][a-z]')
+
+    def is_reasoning_line(line: str) -> bool:
+        stripped = line.strip()
+        lower = stripped.lower()
+        if not stripped:
+            return False
+        # Drop lines that start with reasoning prefixes
+        for prefix in REASONING_LINE_PREFIXES:
+            if lower.startswith(prefix):
+                return True
+        # Drop numbered English reasoning lines (e.g. "1. Acknowledge the greeting.")
+        if NUMBERED_REASONING.match(stripped) and not any(
+            c in stripped for c in ['¡', '¿', 'á', 'é', 'í', 'ó', 'ú', 'ñ', 'Ñ']
+        ):
+            return True
+        return False
+
+    # Split into paragraphs and classify each
+    paragraphs = re.split(r'\n{2,}', text)
+    clean_paragraphs = []
+    
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        lines = para.split('\n')
+        clean_lines = [l for l in lines if not is_reasoning_line(l)]
+        clean_para = '\n'.join(clean_lines).strip()
+        if clean_para:
+            clean_paragraphs.append(clean_para)
+
+    result = '\n\n'.join(clean_paragraphs).strip()
+
+    # If still has reasoning mixed in, take only the last non-empty block
+    # that looks like an actual conversational response (contains Spanish chars or emoji)
+    if result:
+        blocks = [b.strip() for b in result.split('\n\n') if b.strip()]
+        # Find last block with conversational markers (Spanish, emoji, or question mark)
+        for block in reversed(blocks):
+            if any(c in block for c in ['¡', '¿', 'á', 'é', 'í', 'ó', 'ú', 'ñ', '👋', '🚀', '✅', '📊', '?', '!']):
+                if len(block) > 15:
+                    return block.strip()
+
+    return result if result else text.strip()
+
+
 async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Optional[str] = None, custom_system_prompt: Optional[str] = None) -> Dict[str, Any]:
     # Record user message in DB
     conn = get_db_connection()
@@ -489,6 +577,7 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
             
             if text_parts:
                 final_text = "\n".join(text_parts)
+                final_text = strip_thinking_tokens(final_text)
 
             if func_calls:
                 contents.append({"role": "model", "parts": parts})
@@ -515,7 +604,8 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                 if res2.status_code == 200:
                     data2 = res2.json()
                     parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                    final_text = "\n".join([p.get("text") for p in parts2 if "text" in p])
+                    raw2 = "\n".join([p.get("text") for p in parts2 if "text" in p])
+                    final_text = strip_thinking_tokens(raw2)
 
 
 
