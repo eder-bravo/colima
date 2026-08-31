@@ -1,4 +1,4 @@
-// Colima PM Sandbox Application Logic
+// Colima PM Sandbox Application Logic — v2.1
 
 const STORAGE_KEYS = {
   WORKSPACE_ID: 'colima_workspace_id',
@@ -104,7 +104,7 @@ function applyTheme(pref) {
 // 2. STAGE TABS
 function switchStage(stage) {
   document.querySelectorAll('.stage-tab').forEach(tab => {
-    tab.className = 'stage-tab font-medium text-xs px-3.5 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5';
+    tab.className = 'stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5';
   });
   document.querySelectorAll('.stage-view').forEach(view => view.classList.add('hidden'));
 
@@ -112,7 +112,7 @@ function switchStage(stage) {
   const activeView = document.getElementById(`stage-${stage}`);
 
   if (activeTab && activeView) {
-    activeTab.className = 'stage-tab font-semibold text-xs px-3.5 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs';
+    activeTab.className = 'stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs';
     activeView.classList.remove('hidden');
   }
 }
@@ -144,7 +144,7 @@ function setupSSE() {
 function renderClockState(state) {
   if (!state) return;
   simDayEl.textContent = `Día ${state.day_number || 1}`;
-  simTimeEl.textContent = state.formatted_time || '12 Sep 2030, 09:00 AM';
+  simTimeEl.textContent = state.formatted_time || '12 Sep, 09:00 AM';
 
   const speed = state.speed_multiplier || 0;
   if (state.status === 'paused' || speed === 0) {
@@ -180,7 +180,7 @@ async function loadWorkspaceData(renderChat = true) {
   }
 }
 
-// 5. Render Kanban
+// 5. MINIMALIST KANBAN (Linear / Notion Style - Ultra Clean)
 function renderKanban(tasks) {
   const cols = {
     backlog: document.getElementById('col-backlog'),
@@ -196,50 +196,48 @@ function renderKanban(tasks) {
     counts[status]++;
 
     const card = document.createElement('div');
-    // CLEAN WHITE CARD in Light Mode, DARK SLATE in Dark Mode
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-3 shadow-xs space-y-2 transition hover:shadow-sm';
+    // CLEAN PURE WHITE CARD IN LIGHT MODE, REFINED SLATE IN DARK MODE
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-3 shadow-xs hover:shadow-sm transition space-y-2.5 cursor-pointer';
 
-    let priorityBadge = '<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">Normal</span>';
+    let priorityBadge = '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">Normal</span>';
     if (task.priority === 'urgent') {
-      priorityBadge = '<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">Urgente</span>';
+      priorityBadge = '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">Urgente</span>';
     } else if (task.priority === 'high') {
-      priorityBadge = '<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30">Alta</span>';
+      priorityBadge = '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">Alta</span>';
     }
+
+    const assigneeName = task.assignee_name || 'Sin asignar';
+    const initial = assigneeName.charAt(0).toUpperCase();
 
     card.innerHTML = `
       <div class="flex items-start justify-between gap-1.5">
-        <h4 class="font-semibold text-xs text-slate-800 dark:text-slate-100 leading-snug">${escapeHtml(task.title)}</h4>
+        <h4 class="font-medium text-xs text-slate-800 dark:text-slate-100 leading-snug">${escapeHtml(task.title)}</h4>
         ${priorityBadge}
       </div>
       
-      <!-- Progress Bar -->
-      <div class="space-y-1">
-        <div class="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-          <span>${task.completed_hours}h / ${task.estimated_hours}h</span>
-          <span class="font-bold text-indigo-600 dark:text-indigo-400">${task.progress_percent}%</span>
+      <div class="flex items-center justify-between text-[11px] pt-0.5">
+        <div class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+          <span class="w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold">
+            ${initial}
+          </span>
+          <span class="text-[11px]">${escapeHtml(assigneeName)}</span>
         </div>
-        <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full task-progress-bar" style="width: ${task.progress_percent}%"></div>
-        </div>
+        <span class="font-mono text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">${task.progress_percent}%</span>
       </div>
 
-      <!-- Footer Assignee & Role -->
-      <div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
-        <span class="text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-          <i class="fa-solid fa-user-circle text-indigo-500"></i> ${escapeHtml(task.assignee_name || 'Sin asignar')}
-        </span>
-        <span class="text-slate-400 font-medium">${escapeHtml(task.role_required)}</span>
+      <!-- Ultra-thin subtle progress line -->
+      <div class="w-full h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+        <div class="h-full bg-indigo-500 rounded-full task-progress-bar" style="width: ${task.progress_percent}%"></div>
       </div>
     `;
 
     cols[status].appendChild(card);
   });
 
-  // Empty state if column has 0 tasks
   Object.keys(cols).forEach(key => {
     if (counts[key] === 0) {
       cols[key].innerHTML = `
-        <div class="h-24 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-600">
+        <div class="h-20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-600">
           Sin tareas
         </div>
       `;
@@ -260,11 +258,11 @@ function renderSkills(skills) {
   skills.forEach(skill => {
     if (skill.is_active) activeCount++;
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-2.5';
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-2';
     
     card.innerHTML = `
       <div class="flex items-start justify-between">
-        <div class="flex items-center space-x-2.5">
+        <div class="flex items-center space-x-2">
           <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">
             <i class="fa-solid ${skill.icon || 'fa-brain'}"></i>
           </div>
@@ -342,7 +340,7 @@ function renderTalentPool(talent) {
   if (talent.length === 0) {
     talentListEl.innerHTML = `
       <div class="col-span-2 text-center py-6 text-slate-400 text-xs">
-        <p>No hay perfiles cargados en el ATS. Haz clic en "Cargar Demo" o arrastra un PDF.</p>
+        <p>No hay perfiles cargados en el ATS. Haz clic en "Cargar 5 CVs" o arrastra un PDF.</p>
       </div>
     `;
     return;
@@ -671,10 +669,10 @@ async function uploadFiles(files) {
 function updateApiKeyUI() {
   if (geminiApiKey && geminiApiKey.length > 10) {
     apiKeyStatusText.textContent = 'API Key Activa ✓';
-    btnSettings.className = 'text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-medium shadow-sm flex items-center gap-1.5 transition';
+    btnSettings.className = 'text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg font-medium shadow-xs flex items-center gap-1 transition';
   } else {
     apiKeyStatusText.textContent = 'API Key';
-    btnSettings.className = 'text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-medium shadow-sm flex items-center gap-1.5 transition';
+    btnSettings.className = 'text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1.5 rounded-lg font-medium shadow-xs flex items-center gap-1 transition';
   }
 }
 
