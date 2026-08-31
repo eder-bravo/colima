@@ -468,37 +468,30 @@ def strip_thinking_tokens(text: str) -> str:
 
     result = '\n\n'.join(clean_paragraphs).strip()
 
-    # If still has reasoning mixed in, take only the last non-empty block
-    # that looks like an actual conversational response (contains Spanish chars or emoji)
-    if result:
-        blocks = [b.strip() for b in result.split('\n\n') if b.strip()]
-        # Find last block with conversational markers (Spanish, emoji, or question mark)
-        for block in reversed(blocks):
-            if any(c in block for c in ['¡', '¿', 'á', 'é', 'í', 'ó', 'ú', 'ñ', '👋', '🚀', '✅', '📊', '?', '!']):
-                if len(block) > 15:
-                    # Deduplicate: remove lines that are just the same text repeated (quoted or not)
-                    lines_in_block = block.split('\n')
-                    seen_normalized = set()
-                    deduped = []
-                    for line in lines_in_block:
-                        # Normalize: strip quotes, whitespace
-                        norm = line.strip().strip('"').strip("'").strip()
-                        if norm and norm not in seen_normalized:
-                            seen_normalized.add(norm)
-                            deduped.append(line)
-                    final_block = '\n'.join(deduped).strip()
-                    # Strip wrapping quotes Gemma sometimes puts around its final answer
-                    if final_block.startswith('"') and final_block.endswith('"'):
-                        final_block = final_block[1:-1].strip()
-                    elif final_block.startswith("'") and final_block.endswith("'"):
-                        final_block = final_block[1:-1].strip()
-                    return final_block
+    # Deduplicate repeated identical lines (e.g. if Gemma repeated a sentence quoted and unquoted)
+    final_paragraphs = []
+    seen_normalized = set()
+    for para in clean_paragraphs:
+        para_lines = para.split('\n')
+        para_clean = []
+        for line in para_lines:
+            norm = line.strip().strip('"').strip("'").strip()
+            if norm and norm in seen_normalized and len(norm) > 20:
+                continue
+            if norm:
+                seen_normalized.add(norm)
+            para_clean.append(line)
+        if para_clean:
+            final_paragraphs.append('\n'.join(para_clean))
 
-    # Final cleanup: strip wrapping quotes
+    result = '\n\n'.join(final_paragraphs).strip()
+
+    # Final cleanup: strip wrapping outer quotes if the entire text was quoted
     if result.startswith('"') and result.endswith('"'):
         result = result[1:-1].strip()
     elif result.startswith("'") and result.endswith("'"):
         result = result[1:-1].strip()
+
     return result if result else text.strip()
 
 
@@ -663,7 +656,12 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                     data2 = res2.json()
                     parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                     raw2 = "\n".join([p.get("text") for p in parts2 if "text" in p])
-                    final_text = strip_thinking_tokens(raw2)
+                    clean2 = strip_thinking_tokens(raw2)
+                    if clean2 and len(clean2.strip()) > 5:
+                        if final_text and final_text not in clean2:
+                            final_text = f"{final_text}\n\n{clean2}"
+                        else:
+                            final_text = clean2
 
 
 
