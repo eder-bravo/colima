@@ -461,7 +461,17 @@ def strip_thinking_tokens(text: str) -> str:
         for block in reversed(blocks):
             if any(c in block for c in ['¡', '¿', 'á', 'é', 'í', 'ó', 'ú', 'ñ', '👋', '🚀', '✅', '📊', '?', '!']):
                 if len(block) > 15:
-                    return block.strip()
+                    # Deduplicate: remove lines that are just the same text repeated (quoted or not)
+                    lines_in_block = block.split('\n')
+                    seen_normalized = set()
+                    deduped = []
+                    for line in lines_in_block:
+                        # Normalize: strip quotes, whitespace
+                        norm = line.strip().strip('"').strip("'").strip()
+                        if norm and norm not in seen_normalized:
+                            seen_normalized.add(norm)
+                            deduped.append(line)
+                    return '\n'.join(deduped).strip()
 
     return result if result else text.strip()
 
@@ -615,8 +625,9 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
         print(f"[Gemini Exception]: {exc}")
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    if not final_text:
-        final_text = "Acción procesada con éxito y estado actualizado."
+    # If stripping left us with nothing, run smart fallback instead of generic message
+    if not final_text or len(final_text.strip()) < 5:
+        return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
     # Save Assistant message
     conn = get_db_connection()
