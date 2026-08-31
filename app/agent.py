@@ -483,12 +483,14 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     if not api_key or len(api_key.strip()) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Model requested by user
+    # Primary: gemma-4-26b-a4b-it (conversational, as requested by instructor)
+    # Tool-calling fallback: gemini-3.6-flash (supports native function declarations)
     CANDIDATE_MODELS = [
         "gemma-4-26b-a4b-it",
         "gemma-4-31b-it",
-        "gemma-2-27b-it",
-        "gemini-3.6-flash"
+        "gemini-3.6-flash",
+        "gemini-2.5-flash-preview-05-20",
+        "gemini-1.5-flash"
     ]
     headers = {
         "Content-Type": "application/json",
