@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Colima — Asistentes PM Autónomos con IA</title>
+  <title>Hermes PM — Taller de Asistentes PM Autónomos</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -11,7 +11,7 @@
     }
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=4.0">
+  <link rel="stylesheet" href="/static/style.css?v=5.0">
 </head>
 <body class="h-full flex flex-col font-sans overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
 
@@ -23,7 +23,7 @@
       </div>
       <div>
         <h1 class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5 leading-none">
-          Hermes PM <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">Taller</span>
+          Hermes PM <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">Autónomo</span>
         </h1>
       </div>
     </div>
@@ -116,7 +116,7 @@
             H
           </div>
           <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl rounded-tl-xs p-2.5 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-xs leading-relaxed">
-            <p>¡Hola! Soy Hermes, tu PM asistente. Puedo ayudarte a definir proyectos nuevos, monitorear la carga de trabajo del equipo, planificar el Kanban y agendar reuniones. ¿Por dónde empezamos hoy?</p>
+            <p>¡Hola! Soy Hermes, tu PM asistente. Te ayudo a definir proyectos, monitorear la capacidad de los trabajadores, planificar el sprint y darte sugerencias estratégicas. ¿Por dónde empezamos hoy?</p>
           </div>
         </div>
       </div>
@@ -145,75 +145,156 @@
     <!-- RIGHT: Main Stage (8.5 cols) -->
     <section class="lg:col-span-8 flex flex-col bg-slate-50 dark:bg-slate-950 h-full overflow-hidden">
       
-      <!-- Stage Tabs -->
+      <!-- Stage Tabs (Matching User Hierarchy) -->
       <div class="h-11 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 px-3 flex items-center space-x-1 shrink-0">
-        <button onclick="switchStage('kanban')" id="tab-stage-kanban" class="stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs">
-          <i class="fa-solid fa-chart-kanban"></i> Tablero Kanban
+        <button onclick="switchStage('workers')" id="tab-stage-workers" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-users"></i> 1. Mis Trabajadores (<span id="workers-count-badge">0</span>)
+        </button>
+        <button onclick="switchStage('projects')" id="tab-stage-projects" class="stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs">
+          <i class="fa-solid fa-diagram-project"></i> 2. Mis Proyectos & Kanban
+        </button>
+        <button onclick="switchStage('calendar')" id="tab-stage-calendar" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-check"></i> 3. Mi Calendario
+        </button>
+        <button onclick="switchStage('suggestions')" id="tab-stage-suggestions" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+          <i class="fa-solid fa-lightbulb text-amber-500"></i> 4. Sugerencias PM (<span id="suggestions-count-badge">0</span>)
         </button>
         <button onclick="switchStage('skills')" id="tab-stage-skills" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
           <i class="fa-solid fa-brain"></i> Habilidades (<span id="active-skills-count">6</span>)
         </button>
-        <button onclick="switchStage('talent')" id="tab-stage-talent" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
-          <i class="fa-solid fa-users"></i> Talent ATS (<span id="talent-count-badge">0</span>)
-        </button>
-        <button onclick="switchStage('calendar')" id="tab-stage-calendar" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
-          <i class="fa-solid fa-calendar-check"></i> Calendario & Decisiones
-        </button>
-        <button onclick="switchStage('inspector')" id="tab-stage-inspector" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
-          <i class="fa-solid fa-microchip"></i> Inspector
-        </button>
       </div>
 
-      <!-- KANBAN -->
-      <div id="stage-kanban" class="stage-view flex-1 p-3.5 overflow-x-auto grid grid-cols-4 gap-3.5">
+      <!-- 1. MIS TRABAJADORES -->
+      <div id="stage-workers" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-5xl mx-auto w-full space-y-4">
+        <div class="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+          <div>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <i class="fa-solid fa-users text-indigo-500"></i> Equipo de Trabajo & ATS
+            </h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Arrastra CVs en PDF para incorporar talento con detección automática de seniority y factor de productividad.
+            </p>
+          </div>
+          <button onclick="document.getElementById('cv-file-input').click()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-upload"></i> Subir CV (PDF)
+          </button>
+        </div>
+
+        <div id="dropzone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-white dark:bg-slate-900/60 rounded-2xl p-4 text-center cursor-pointer transition shadow-xs">
+          <input type="file" id="cv-file-input" accept=".pdf" class="hidden" multiple />
+          <p class="text-xs text-slate-600 dark:text-slate-300 font-medium">
+            <i class="fa-solid fa-cloud-arrow-up text-indigo-500 mr-1.5"></i> Arrastra aquí los CVs en PDF o haz clic para seleccionarlos
+          </p>
+        </div>
+
+        <div id="workers-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </div>
+
+      <!-- 2. MIS PROYECTOS & KANBAN -->
+      <div id="stage-projects" class="stage-view flex-1 flex flex-col overflow-hidden">
         
-        <!-- Backlog -->
-        <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
-            <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-slate-400"></span> Backlog
-            </span>
-            <span id="count-backlog" class="text-[10px] bg-white dark:bg-slate-800 px-2 py-0.5 rounded font-semibold text-slate-500 shadow-xs">0</span>
+        <!-- Active Project Banner -->
+        <div id="project-banner" class="px-4 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-bold">
+              <i class="fa-solid fa-cube"></i>
+            </div>
+            <div>
+              <h3 id="project-title-display" class="font-bold text-xs text-slate-900 dark:text-white">Fintech Micro-Lending MVP</h3>
+              <p id="project-stack-display" class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Stack: FastAPI, React, PostgreSQL, Docker • Meta: 30 días</p>
+            </div>
           </div>
-          <div id="col-backlog" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          <div class="flex items-center space-x-2">
+            <span class="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full font-semibold">
+              ● En Desarrollo
+            </span>
+          </div>
         </div>
 
-        <!-- In Progress -->
-        <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
-            <span class="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> En Progreso
-            </span>
-            <span id="count-in_progress" class="text-[10px] bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded font-semibold shadow-xs">0</span>
+        <!-- Kanban Board -->
+        <div class="flex-1 p-3.5 overflow-x-auto grid grid-cols-4 gap-3.5">
+          <!-- Backlog -->
+          <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
+              <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-slate-400"></span> Backlog
+              </span>
+              <span id="count-backlog" class="text-[10px] bg-white dark:bg-slate-800 px-2 py-0.5 rounded font-semibold text-slate-500 shadow-xs">0</span>
+            </div>
+            <div id="col-backlog" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
           </div>
-          <div id="col-in_progress" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
-        </div>
 
-        <!-- Review -->
-        <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
-            <span class="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span> En Revisión
-            </span>
-            <span id="count-review" class="text-[10px] bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded font-semibold shadow-xs">0</span>
+          <!-- In Progress -->
+          <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
+              <span class="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> En Progreso
+              </span>
+              <span id="count-in_progress" class="text-[10px] bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded font-semibold shadow-xs">0</span>
+            </div>
+            <div id="col-in_progress" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
           </div>
-          <div id="col-review" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
-        </div>
 
-        <!-- Done -->
-        <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
-            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Completado
-            </span>
-            <span id="count-done" class="text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded font-semibold shadow-xs">0</span>
+          <!-- Review -->
+          <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
+              <span class="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span> En Revisión
+              </span>
+              <span id="count-review" class="text-[10px] bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded font-semibold shadow-xs">0</span>
+            </div>
+            <div id="col-review" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
           </div>
-          <div id="col-done" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
-        </div>
 
+          <!-- Done -->
+          <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
+              <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Completado
+              </span>
+              <span id="count-done" class="text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded font-semibold shadow-xs">0</span>
+            </div>
+            <div id="col-done" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- SKILLS HUB -->
+      <!-- 3. MI CALENDARIO -->
+      <div id="stage-calendar" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+          <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <i class="fa-solid fa-calendar-days text-indigo-500"></i> Ceremonias & Cronograma del Sprint
+          </h3>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            Reuniones convocadas automáticamente por Hermes según el avance e hitos del proyecto.
+          </p>
+        </div>
+        <div id="calendar-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </div>
+
+      <!-- 4. SUGERENCIAS POR PM ASISTENTE -->
+      <div id="stage-suggestions" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+          <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <i class="fa-solid fa-lightbulb text-amber-500"></i> Centro de Inteligencia Autónoma de Hermes PM
+          </h3>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            Hermes evalúa continuamente la velocidad, cuellos de botella, sobrecargas y la necesidad de contrataciones para alcanzar el Goal del proyecto.
+          </p>
+        </div>
+
+        <div id="suggestions-container" class="space-y-3"></div>
+
+        <!-- Managerial Decisions Section -->
+        <div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-scale-balanced text-indigo-500"></i> Aprobaciones Gerenciales Pendientes
+          </h4>
+          <div id="decisions-container" class="space-y-2.5"></div>
+        </div>
+      </div>
+
+      <!-- 5. HABILIDADES (SKILLS HUB) -->
       <div id="stage-skills" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-3.5">
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
           <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -223,47 +304,7 @@
             Activa, desactiva o edita las directrices de comportamiento que Hermes combina en su loop agéntico.
           </p>
         </div>
-
         <div id="skills-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-      </div>
-
-      <!-- TALENT ATS -->
-      <div id="stage-talent" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-3.5">
-        <div id="dropzone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-white dark:bg-slate-900/60 rounded-2xl p-5 text-center cursor-pointer transition shadow-xs">
-          <input type="file" id="cv-file-input" accept=".pdf" class="hidden" multiple />
-          <i class="fa-solid fa-cloud-arrow-up text-2xl text-indigo-500 mb-1"></i>
-          <p class="text-xs font-bold text-slate-800 dark:text-slate-200">Arrastra aquí tus CVs en PDF</p>
-          <p class="text-[10px] text-slate-400 mt-0.5">El ATS extraerá el rol, seniority y habilidades.</p>
-        </div>
-
-        <div id="talent-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-      </div>
-
-      <!-- CALENDAR & DECISIONS -->
-      <div id="stage-calendar" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-5">
-        <div class="space-y-2.5">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-            <i class="fa-solid fa-scale-balanced text-amber-500"></i> Aprobaciones Gerenciales Pendientes
-          </h3>
-          <div id="decisions-container" class="space-y-2.5"></div>
-        </div>
-
-        <div class="space-y-2.5">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-            <i class="fa-solid fa-calendar-days text-indigo-500"></i> Calendario de Ceremonias del Sprint
-          </h3>
-          <div id="calendar-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-        </div>
-      </div>
-
-      <!-- INSPECTOR -->
-      <div id="stage-inspector" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-3 font-mono text-xs">
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs font-sans">
-          <h3 class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
-            <i class="fa-solid fa-microchip mr-1"></i> Trazas de Razonamiento ReAct
-          </h3>
-        </div>
-        <div id="trajectories-list" class="space-y-2.5"></div>
       </div>
 
     </section>
@@ -340,6 +381,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=4.0"></script>
+  <script src="/static/app.js?v=5.0"></script>
 </body>
 </html>

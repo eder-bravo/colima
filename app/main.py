@@ -242,19 +242,56 @@ async def get_workspace_data(workspace_id: str, student_name: str = "Alumno"):
             "created_at": t["created_at"]
         })
 
+    project_rows = conn.execute("SELECT * FROM projects WHERE workspace_id = ? ORDER BY created_at DESC;", (workspace_id,)).fetchall()
+    sug_rows = conn.execute("SELECT * FROM pm_suggestions WHERE workspace_id = ? AND status = 'active' ORDER BY created_at DESC;", (workspace_id,)).fetchall()
     conn.close()
 
     return {
         "workspace": dict(ws),
+        "projects": [dict(p) for p in project_rows],
         "talent_pool": talent,
         "tasks": tasks,
         "skills": [dict(s) for s in skills_rows],
         "calendar_events": [dict(c) for c in cal_rows],
         "managerial_decisions": [dict(d) for d in dec_rows],
+        "pm_suggestions": [dict(sg) for sg in sug_rows],
         "hiring_requests": [dict(h) for h in hiring_rows],
         "messages": messages,
         "trajectories": trajectories
     }
+
+@app.post("/api/workspaces/{workspace_id}/suggestions/{suggestion_id}/apply")
+async def apply_suggestion(workspace_id: str, suggestion_id: str):
+    ensure_workspace(workspace_id)
+    conn = get_db_connection()
+    sug = conn.execute("SELECT * FROM pm_suggestions WHERE id = ? AND workspace_id = ?;", (suggestion_id, workspace_id)).fetchone()
+    if not sug:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Sugerencia no encontrada")
+
+    action_type = sug["action_type"]
+    if action_type == "quick_load":
+        conn.close()
+        await setup_demo_workspace(workspace_id)
+        conn = get_db_connection()
+    elif action_type == "schedule_meeting":
+        evt_id = f"evt-{int(time.time()*1000)}"
+        conn.execute("""
+        INSERT INTO calendar_events (id, workspace_id, title, sim_date, time_slot, event_type, attendees, agenda, created_at)
+        VALUES (?, ?, 'Sesión de Desbloqueo Técnico', 'Día Actual', '11:00 AM', 'meeting', 'Tech Lead & Devs', 'Desbloquear dependencias críticas del sprint.', ?);
+        """, (evt_id, workspace_id, datetime.utcnow().isoformat()))
+    elif action_type == "request_approval":
+        dec_id = f"dec-{int(time.time()*1000)}"
+        conn.execute("""
+        INSERT INTO managerial_decisions (id, workspace_id, title, description, impact_summary, status, response_comment, created_at)
+        VALUES (?, ?, 'Aprobación: Contratación QA Automation', 'Incorporar especialista en testing automatizado para asegurar el pase a producción del MVP.', '+$3,800 USD / Reduce tasa de bugs en 80%', 'pending', NULL, ?);
+        """, (dec_id, workspace_id, datetime.utcnow().isoformat()))
+
+    conn.execute("UPDATE pm_suggestions SET status = 'applied' WHERE id = ? AND workspace_id = ?;", (suggestion_id, workspace_id))
+    conn.commit()
+    conn.close()
+    return {"status": "applied", "action_type": action_type}
+
 
 @app.post("/api/workspaces/{workspace_id}/setup-demo")
 async def setup_demo_workspace(workspace_id: str):

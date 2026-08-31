@@ -1,6 +1,8 @@
 import sqlite3
 import os
 import json
+import uuid
+import time
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -116,7 +118,7 @@ def init_db():
     );
     """)
 
-    # Talent Pool (ATS)
+    # Talent Pool (Mis Trabajadores / ATS)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS talent_profiles (
         id TEXT PRIMARY KEY,
@@ -197,6 +199,22 @@ def init_db():
     );
     """)
 
+    # PM Autonomous Suggestions / Insights
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS pm_suggestions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        category TEXT NOT NULL, -- staffing, workload, velocity, risk
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        recommendation TEXT NOT NULL,
+        action_type TEXT, -- hire, rebalance, schedule_demo, approve
+        action_payload TEXT DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'active', -- active, applied, dismissed
+        created_at TEXT NOT NULL
+    );
+    """)
+
     # Skills Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS skills (
@@ -207,6 +225,7 @@ def init_db():
         description TEXT NOT NULL,
         prompt_instructions TEXT NOT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
         PRIMARY KEY (id, workspace_id)
     );
     """)
@@ -225,6 +244,58 @@ def init_db():
         created_at TEXT NOT NULL
     );
     """)
+
+    conn.commit()
+    conn.close()
+
+def compute_pm_suggestions(workspace_id: str):
+    conn = get_db_connection()
+    talents = conn.execute("SELECT id, name, role, seniority, productivity_factor FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    tasks = conn.execute("SELECT id, title, assignee_name, estimated_hours, completed_hours, status, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    projects = conn.execute("SELECT id, title, target_deadline FROM projects WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    
+    # Check 1: No workers present in ATS
+    if len(talents) == 0:
+        s_id = f"sug-{workspace_id}-no-staff"
+        conn.execute("""
+        INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
+        VALUES (?, ?, 'staffing', 'Falta de Equipo (Staffing)', 'El proyecto no cuenta con desarrolladores en el ATS.', 'Carga los CVs de prueba o arrastra tus propios PDFs para que Hermes pueda asignar las tareas.', 'quick_load', '{}', 'active', ?);
+        """, (s_id, workspace_id, datetime.utcnow().isoformat()))
+
+    # Check 2: Worker Overload / Bottleneck
+    workload = {}
+    for t in talents:
+        workload[t["name"]] = 0.0
+    for task in tasks:
+        name = task["assignee_name"]
+        if name in workload:
+            workload[name] += task["estimated_hours"]
+            
+    for name, hrs in workload.items():
+        if hrs > 30.0:
+            s_id = f"sug-{workspace_id}-overload-{name.lower().replace(' ', '-')}"
+            conn.execute("""
+            INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
+            VALUES (?, ?, 'workload', 'Riesgo de Sobrecarga (Burnout)', ?, 'Se sugiere reasignar tareas menores a desarrolladores con disponibilidad.', 'rebalance', ?, 'active', ?);
+            """, (s_id, workspace_id, f"{name} tiene {hrs}h acumuladas asignadas (límite saludable 30h).", json.dumps({"worker": name, "hours": hrs}), datetime.utcnow().isoformat()))
+
+    # Check 3: Blockers in tasks
+    for task in tasks:
+        if task["blocker_reason"]:
+            s_id = f"sug-{workspace_id}-blocker-{task['id']}"
+            conn.execute("""
+            INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
+            VALUES (?, ?, 'risk', 'Bloqueo Activo en Tarea', ?, 'Convocar sesión de desbloqueo con el equipo.', 'schedule_meeting', ?, 'active', ?);
+            """, (s_id, workspace_id, f"La tarea '{task['title']}' está detenida: {task['blocker_reason']}", json.dumps({"task_id": task["id"]}), datetime.utcnow().isoformat()))
+
+    # Check 4: Hiring Opportunity (No QA)
+    has_qa = any("qa" in t["role"].lower() or "tester" in t["role"].lower() for t in talents)
+    if len(talents) > 0 and not has_qa:
+        s_id = f"sug-{workspace_id}-hire-qa"
+        conn.execute("""
+        INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
+        VALUES (?, ?, 'staffing', 'Oportunidad de Contratación: QA Engineer', 'El equipo no cuenta con un especialista en QA Automation para validar el MVP antes de producción.', 'Solicitar aprobación gerencial para contratar un QA Automation Senior.', 'request_approval', '{}', 'active', ?);
+        """, (s_id, workspace_id, datetime.utcnow().isoformat()))
 
     conn.commit()
     conn.close()
@@ -253,10 +324,10 @@ def ensure_workspace(workspace_id: str, name: str = "Alumno"):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """, (sk["id"], workspace_id, sk["name"], sk["icon"], sk["description"], sk["prompt_instructions"], sk["is_active"], datetime.utcnow().isoformat()))
 
-
     conn.commit()
     conn.close()
 
+    compute_pm_suggestions(workspace_id)
+
 def ensure_workspace_skills(workspace_id: str):
     ensure_workspace(workspace_id)
-
