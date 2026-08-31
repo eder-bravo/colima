@@ -527,7 +527,13 @@ function appendUserMessage(text, scroll = true) {
   if (scroll) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
+function sanitizeMessage(text) {
+  if (!text) return '';
+  return text.replace(/\*\[Nota:[\s\S]*$/gi, '').replace(/\[Nota:[\s\S]*?\]/gi, '').trim();
+}
+
 function appendAssistantMessage(text, scroll = true) {
+  const cleanText = sanitizeMessage(text) || 'Acción procesada.';
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-2';
   
@@ -536,12 +542,13 @@ function appendAssistantMessage(text, scroll = true) {
       H
     </div>
     <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl rounded-tl-xs p-3 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-xs leading-relaxed chat-body text-xs">
-      <p class="whitespace-pre-line">${escapeHtml(text)}</p>
+      <p class="whitespace-pre-line">${escapeHtml(cleanText)}</p>
     </div>
   `;
   chatMessagesEl.appendChild(div);
   if (scroll) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
+
 
 function appendSystemMessage(text, scroll = true) {
   const div = document.createElement('div');
@@ -595,7 +602,22 @@ function setupEventListeners() {
     }
   });
 
+  const btnClearChat = document.getElementById('btn-clear-chat');
+  if (btnClearChat) {
+    btnClearChat.addEventListener('click', async () => {
+      if (!confirm('¿Deseas reiniciar la conversación del chat con Hermes?')) return;
+      try {
+        await fetch(`/api/workspaces/${workspaceId}/chat/clear`, { method: 'POST' });
+        chatMessagesEl.innerHTML = '';
+        appendAssistantMessage('¡Hola! Soy Hermes, tu PM asistente. Puedo ayudarte a definir proyectos nuevos, monitorear la carga de trabajo del equipo, planificar el Kanban y agendar reuniones. ¿Por dónde empezamos hoy?', false);
+      } catch (err) {
+        alert('Error al limpiar el chat: ' + err.message);
+      }
+    });
+  }
+
   document.querySelectorAll('.quick-prompt').forEach(btn => {
+
     btn.addEventListener('click', () => {
       chatInput.value = btn.textContent.trim().replace(/^[\uD800-\uDBFF\uDC00-\uDFFF\u2600-\u27BF]+\s*/, '');
       chatForm.dispatchEvent(new Event('submit'));

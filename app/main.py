@@ -390,6 +390,16 @@ async def agent_chat(
     )
     return result
 
+@app.post("/api/workspaces/{workspace_id}/chat/clear")
+async def clear_chat_history(workspace_id: str):
+    ensure_workspace(workspace_id)
+    conn = get_db_connection()
+    conn.execute("DELETE FROM chat_messages WHERE workspace_id = ?;", (workspace_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "cleared"}
+
+
 @app.get("/api/samples/{filename}")
 async def get_sample_file(filename: str):
     safe_name = os.path.basename(filename)
