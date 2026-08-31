@@ -526,9 +526,11 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     if not resolved_key or len(resolved_key) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Models: gemini-2.5-flash (primary, native tools & chat) > gemini-2.0-flash > gemma-4-26b-a4b-it
+    # Models: gemini-3.5-flash-lite (fastest, ultra-low latency & PM-tuned) > gemini-2.5-flash > gemini-3.5-flash
     CANDIDATE_MODELS = [
+        "gemini-3.5-flash-lite",
         "gemini-2.5-flash",
+        "gemini-3.5-flash",
         "gemini-2.0-flash",
         "gemma-4-26b-a4b-it"
     ]
@@ -641,11 +643,15 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                     t_res = execute_tool(workspace_id, fname, fargs)
                     tool_results.append({"tool": fname, "result": t_res})
                     
+                    fr_data = {
+                        "name": fname,
+                        "response": {"output": t_res}
+                    }
+                    if fc.get("id"):
+                        fr_data["id"] = fc.get("id")
+
                     tool_response_parts.append({
-                        "functionResponse": {
-                            "name": fname,
-                            "response": {"output": t_res}
-                        }
+                        "functionResponse": fr_data
                     })
                 
                 contents.append({"role": "user", "parts": tool_response_parts})
