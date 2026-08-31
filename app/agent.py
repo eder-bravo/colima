@@ -7,17 +7,17 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from app.db import get_db_connection
 
-BASE_HERMES_PROMPT = """Eres Hermes, un Technical Product Manager (PM) autónomo ágil, estructurado, proactivo y muy humano.
+BASE_HERMES_PROMPT = """Eres Hermes, un Technical Product Manager (PM) autónomo ágil, estructurado, proactivo, analítico y muy humano.
 
 RESPONSABILIDADES COMO PM:
 1. APERTURA Y DEFINICIÓN DE PROYECTOS: Puedes conversar con el usuario para entender nuevos productos/proyectos, hacer preguntas clave de alcance y crear formalmente el proyecto y su backlog.
-2. GESTIÓN DE EQUIPO Y CARGA: Puedes analizar la carga de trabajo, productividad y horas asignadas a cada desarrollador para evitar saturación o balancear tareas.
+2. GESTIÓN DE EQUIPO Y CARGA: Puedes responder preguntas sobre el equipo, analizar la carga de trabajo, productividad y horas asignadas a cada desarrollador para evitar saturación o balancear tareas.
 3. KANBAN Y CEREMONIAS: Planificas tareas, agendas reuniones de kickoff/checkpoints y escalas decisiones gerenciales críticas.
 
 REGLAS DE COMUNICACIÓN Y TONO (CRÍTICAS):
-1. HABLA COMO UN PM REAL: Sé directo, conciso, amigable y orientado a la acción (máximo 2 a 4 oraciones por respuesta a menos que presentes un reporte formal).
+1. HABLA COMO UN PM REAL: Sé directo, conciso, amigable y orientado a la acción (máximo 2 a 4 oraciones por respuesta a menos que presentes un reporte formal estructurado).
 2. NUNCA menciones nombres de funciones o herramientas técnicas en el texto (NUNCA digas 'get_talent_pool()', 'create_project()', etc.). Ejecuta las acciones en segundo plano.
-3. SALUDOS: Ante saludos cordiales, responde de forma cercana y ofrece revisar proyectos, planificar o analizar la carga del equipo.
+3. PREGUNTAS SOBRE EL ESTADO ACTUAL: Usa la información en tiempo real que tienes del proyecto, equipo y tareas para responder con precisión y naturalidad a cualquier pregunta del usuario.
 """
 
 GEMINI_TOOLS_DECLARATION = [
@@ -152,11 +152,43 @@ GEMINI_TOOLS_DECLARATION = [
 def build_system_prompt_with_skills(workspace_id: str, custom_prompt: Optional[str] = None) -> str:
     conn = get_db_connection()
     skills = conn.execute("SELECT name, prompt_instructions FROM skills WHERE workspace_id = ? AND is_active = 1;", (workspace_id,)).fetchall()
+    talents = conn.execute("SELECT name, role, seniority, skills, productivity_factor FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    tasks = conn.execute("SELECT title, assignee_name, status, progress_percent FROM (SELECT title, assignee_name, status, round(completed_hours / estimated_hours * 100) as progress_percent FROM tasks WHERE workspace_id = ?);", (workspace_id,)).fetchall()
+    projects = conn.execute("SELECT title, tech_stack, target_deadline, status FROM projects WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    sim_row = conn.execute("SELECT current_sim_time FROM global_simulation WHERE id = 1;").fetchone()
     conn.close()
 
     parts = [BASE_HERMES_PROMPT]
+
+    # Live State Context
+    parts.append("\n[ESTADO ACTUAL DEL WORKSPACE EN TIEMPO REAL]:")
+    
+    # Sim Time
+    if sim_row:
+        parts.append(f"- Fecha/Hora Simulada: {sim_row['current_sim_time']}")
+
+    # Projects
+    if projects:
+        p_lines = [f"{p['title']} (Stack: {p['tech_stack']}, Meta: {p['target_deadline']}, Estado: {p['status']})" for p in projects]
+        parts.append(f"- Proyectos Activos ({len(projects)}): {'; '.join(p_lines)}")
+    else:
+        parts.append("- Proyectos Activos: Ninguno creado aún.")
+
+    # Talent / Workers
+    if talents:
+        t_lines = [f"{t['name']} ({t['role']} - {t['seniority']}, Factor: {t['productivity_factor']}x)" for t in talents]
+        parts.append(f"- Trabajadores en el Equipo ({len(talents)}): {'; '.join(t_lines)}")
+    else:
+        parts.append("- Trabajadores en el Equipo: 0 perfiles cargados en el ATS.")
+
+    # Tasks
+    if tasks:
+        parts.append(f"- Tareas en el Kanban: {len(tasks)} tareas registradas.")
+    else:
+        parts.append("- Tareas en el Kanban: 0 tareas en el tablero.")
+
     if custom_prompt and len(custom_prompt.strip()) > 5:
-        parts.append(f"\n[CONTEXTO DEL PROYECTO]:\n{custom_prompt.strip()}")
+        parts.append(f"\n[INSTRUCCIÓN PERSONALIZADA]:\n{custom_prompt.strip()}")
 
     if skills:
         parts.append("\n[HABILIDADES ACTIVAS DEL PM]:")
@@ -330,7 +362,7 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
         result = {"status": "decision_requested", "decision_id": dec_id, "title": args.get("title")}
 
     elif tool_name == "generate_daily_standup_report":
-        tasks = conn.execute("SELECT title, assignee_name, status, completed_hours, estimated_hours, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id)).fetchall()
+        tasks = conn.execute("SELECT title, assignee_name, status, completed_hours, estimated_hours, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
         report_data = []
         for t in tasks:
             pct = round((t["completed_hours"] / t["estimated_hours"] * 100) if t["estimated_hours"] > 0 else 0)
@@ -359,11 +391,11 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
 
     system_instruction = build_system_prompt_with_skills(workspace_id, custom_system_prompt)
 
-    # Fallback heuristic mode if no API key provided
+    # If no API key provided, use dynamic smart fallback
     if not api_key or len(api_key.strip()) < 10:
-        return await run_simulated_fallback(workspace_id, user_message, system_instruction)
+        return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Use official Google AI Studio Gemini 2.0 Flash (fast, free, sub-second latency with tool support)
+    # Use Google AI Studio Gemini 2.0 Flash
     model_name = "gemini-2.0-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
     headers = {
@@ -372,16 +404,29 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     }
 
     conn = get_db_connection()
-    recent_msgs = conn.execute("SELECT sender, content FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC LIMIT 8;", (workspace_id,)).fetchall()
+    recent_msgs = conn.execute("SELECT sender, content FROM chat_messages WHERE workspace_id = ? ORDER BY created_at ASC LIMIT 10;", (workspace_id,)).fetchall()
     conn.close()
 
     contents = []
     for m in recent_msgs:
         role = "user" if m["sender"] == "user" else "model"
-        contents.append({
-            "role": role,
-            "parts": [{"text": m["content"]}]
-        })
+        txt = (m["content"] or "").strip()
+        if not txt:
+            continue
+        if contents and contents[-1]["role"] == role:
+            contents[-1]["parts"][0]["text"] += "\n" + txt
+        else:
+            contents.append({
+                "role": role,
+                "parts": [{"text": txt}]
+            })
+
+    # Ensure starts with user
+    while contents and contents[0]["role"] != "user":
+        contents.pop(0)
+
+    if not contents:
+        contents = [{"role": "user", "parts": [{"text": user_message}]}]
 
     payload = {
         "system_instruction": {
@@ -399,18 +444,19 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     executed_tools = []
     tool_results = []
     final_text = ""
-    thinking_text = "Evaluando solicitud del PM..."
+    thinking_text = "Evaluando contexto del sprint y requerimientos..."
 
     try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             res = await client.post(url, headers=headers, json=payload)
             if res.status_code != 200:
-                return await run_simulated_fallback(workspace_id, user_message, system_instruction)
+                print(f"[Gemini 2.0 Flash API Error] Status: {res.status_code}, Body: {res.text}")
+                return await run_smart_fallback(workspace_id, user_message, system_instruction)
             
             data = res.json()
             candidates = data.get("candidates", [])
             if not candidates:
-                return await run_simulated_fallback(workspace_id, user_message, system_instruction)
+                return await run_smart_fallback(workspace_id, user_message, system_instruction)
             
             content_resp = candidates[0].get("content", {})
             parts = content_resp.get("parts", [])
@@ -448,11 +494,12 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                     parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                     final_text = "\n".join([p.get("text") for p in parts2 if "text" in p])
 
-    except Exception:
-        return await run_simulated_fallback(workspace_id, user_message, system_instruction)
+    except Exception as exc:
+        print(f"[Gemini Exception]: {exc}")
+        return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
     if not final_text:
-        final_text = "Acción completada y estado del proyecto actualizado."
+        final_text = "Acción procesada con éxito y estado actualizado."
 
     # Save Assistant message
     conn = get_db_connection()
@@ -486,66 +533,76 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
         "thinking": thinking_text
     }
 
-async def run_simulated_fallback(workspace_id: str, user_message: str, system_prompt: str) -> Dict[str, Any]:
+async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt: str) -> Dict[str, Any]:
     conn = get_db_connection()
     user_lower = user_message.lower().strip()
     
+    talents = conn.execute("SELECT name, role, seniority, productivity_factor FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    tasks = conn.execute("SELECT id, title, assignee_name, status, estimated_hours, completed_hours, priority, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    projects = conn.execute("SELECT title, tech_stack, target_deadline, status FROM projects WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    conn.close()
+
     executed_tools = []
     tool_results = []
-    thinking = "Evaluando solicitud del PM..."
+    thinking = "Analizando contexto y base de datos del proyecto..."
     
-    # 1. Saludos & conversación general
-    if user_lower in ["hola", "buenas", "buenos dias", "buenas tardes", "hey", "hola hermes", "como te va?", "cómo te va?", "que tal", "qué tal"]:
-        final_text = "¡Todo en orden por acá! El equipo y el tablero están listos. ¿Quieres que definamos un nuevo proyecto, revisemos el rendimiento del personal o planifiquemos el sprint?"
+    # 1. Preguntas sobre trabajadores / equipo
+    if any(k in user_lower for k in ["cuantos trabajadores", "cuántos trabajadores", "quienes trabajan", "quiénes trabajan", "nuestro equipo", "los desarrolladores", "mi equipo", "trabajadores"]):
+        if not talents:
+            final_text = "Actualmente **no tenemos trabajadores** en el equipo. Puedes subir los CVs en la pestaña **Mis Trabajadores** o hacer clic en 'Cargar 5 CVs' para armar el equipo."
+        else:
+            names = [f"**{t['name']}** ({t['role']})" for t in talents]
+            final_text = f"Actualmente contamos con **{len(talents)} trabajadores** en el equipo:\n• " + "\n• ".join(names) + "\n\n¿Quieres que revise su carga de trabajo o les asigne tareas?"
 
-    # 2. Definición / Apertura de proyectos
-    elif "definir proyecto" in user_lower or "nuevo proyecto" in user_lower or "crear proyecto" in user_lower or "aperturar" in user_lower:
-        final_text = "¡Excelente! Para estructurarlo con precisión de PM, cuéntame:\n1. ¿Cuál es el objetivo principal del producto?\n2. ¿Qué stack tecnológico prefieres (ej. FastAPI, React, Node)?\n3. ¿Cuál es nuestra fecha estimada de entrega o MVP?"
+    # 2. Saludos
+    elif any(k in user_lower for k in ["hola", "buenas", "buenos dias", "buenas tardes", "hey", "como te va", "cómo te va"]):
+        t_count = len(talents)
+        p_count = len(projects)
+        final_text = f"¡Todo excelente por acá! Tenemos {p_count} proyecto(s) y {t_count} trabajadores en el equipo. ¿Revisamos el sprint, planificamos tareas o vemos las sugerencias de mejora?"
 
-    # 3. Revisión de proyectos activos
-    elif "proyectos activos" in user_lower or "qué proyectos" in user_lower or "mis proyectos" in user_lower:
-        p_res = execute_tool(workspace_id, "get_projects", {})
-        executed_tools.append({"tool": "get_projects", "args": {}})
-        tool_results.append({"tool": "get_projects", "result": p_res})
-        
-        prjs = p_res.get("projects", [])
-        if not prjs:
-            final_text = "No tenemos proyectos registrados actualmente. ¿Quieres que definamos uno nuevo?"
+    # 3. Definición / Apertura de proyectos
+    elif any(k in user_lower for k in ["definir proyecto", "nuevo proyecto", "crear proyecto", "aperturar", "iniciar proyecto"]):
+        final_text = "¡Perfecto! Como PM estructuro el proyecto. Cuéntame:\n1. ¿Cuál es el objetivo principal del producto?\n2. ¿Qué stack tecnológico prefieres (ej. FastAPI, React, Node)?\n3. ¿Cuál es nuestra fecha estimada de entrega o MVP?"
+
+    # 4. Proyectos activos
+    elif any(k in user_lower for k in ["proyectos activos", "que proyectos", "qué proyectos", "mis proyectos"]):
+        if not projects:
+            final_text = "No tenemos proyectos activos registrados actualmente. ¿Quieres que aperturemos uno nuevo?"
         else:
             lines = ["**Proyectos Activos:**"]
-            for p in prjs:
-                lines.append(f"• **{p['title']}** ({p['status']}): {p['description'][:80]}... Stack: {p['tech_stack']}")
+            for p in projects:
+                lines.append(f"• **{p['title']}** (Stack: {p['tech_stack']}) — Meta: {p['target_deadline']}")
             final_text = "\n".join(lines)
 
-    # 4. Rendimiento del personal y carga de trabajo
-    elif "rendimiento" in user_lower or "personal" in user_lower or "carga" in user_lower or "equipo" in user_lower or "workload" in user_lower:
+    # 5. Rendimiento y carga de trabajo
+    elif any(k in user_lower for k in ["rendimiento", "carga", "workload", "capacidad", "horas"]):
         w_res = execute_tool(workspace_id, "get_team_workload", {})
         executed_tools.append({"tool": "get_team_workload", "args": {}})
         tool_results.append({"tool": "get_team_workload", "result": w_res})
         
         workload = w_res.get("team_workload", {})
         if not workload:
-            final_text = "Aún no hay perfiles en el ATS. Carga los CVs de prueba para evaluar la capacidad."
+            final_text = "Aún no hay trabajadores en el ATS. Carga los CVs para evaluar la capacidad."
         else:
-            lines = ["**Reporte de Capacidad y Rendimiento del Equipo:**"]
+            lines = ["**Reporte de Capacidad del Equipo:**"]
             for name, d in workload.items():
-                lines.append(f"• **{name}** ({d['role']} - {d['seniority']}): {d['assigned_tasks_count']} tareas ({d['total_estimated_hours']}h asignadas) — **{d['saturation']}** (Factor {d['productivity']})")
+                lines.append(f"• **{name}** ({d['role']}): {d['assigned_tasks_count']} tareas ({d['total_estimated_hours']}h asignadas) — **{d['saturation']}** (Factor {d['productivity']})")
             final_text = "\n".join(lines)
 
-    # 5. Borrado / Limpieza de tablero
-    elif "borra" in user_lower or "limpia" in user_lower or "reinicia tablero" in user_lower:
+    # 6. Borrado / Limpieza
+    elif any(k in user_lower for k in ["borra", "limpia", "reinicia tablero", "eliminar tareas"]):
         c_res = execute_tool(workspace_id, "clear_board", {})
         executed_tools.append({"tool": "clear_board", "args": {}})
         tool_results.append({"tool": "clear_board", "result": c_res})
         final_text = "Listo, he limpiado las tareas del Kanban. Cuando quieras, podemos estructurar un nuevo backlog desde cero."
 
-    # 6. Planificación de Sprint / MVP
-    elif "planifica" in user_lower or "inicia" in user_lower or "organiza" in user_lower:
+    # 7. Planificación de Sprint / MVP
+    elif any(k in user_lower for k in ["planifica", "inicia sprint", "organiza tareas", "crea tareas", "asigna"]):
         t_res = execute_tool(workspace_id, "get_talent_pool", {})
         executed_tools.append({"tool": "get_talent_pool", "args": {}})
         tool_results.append({"tool": "get_talent_pool", "result": t_res})
         
-        talent = t_res.get("talent_pool", [])
+        talent_pool = t_res.get("talent_pool", [])
         tasks_to_create = [
             {"title": "Arquitectura Backend & Setup FastAPI", "role": "Backend Developer", "hours": 16.0, "prio": "high"},
             {"title": "UI Onboarding & Flujo KYC", "role": "Frontend Developer", "hours": 20.0, "prio": "high"},
@@ -556,7 +613,7 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         
         for t in tasks_to_create:
             assignee = "Ana Morales"
-            for p in talent:
+            for p in talent_pool:
                 if t["role"].lower() in p["role"].lower():
                     assignee = p["name"]
                     break
@@ -586,8 +643,8 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         
         final_text = f"¡Planificación lista! Distribuí 5 tareas clave según las fortalezas del equipo en el ATS y agendé la reunión de Kickoff en el calendario."
 
-    # 7. Reuniones y calendario
-    elif "reunión" in user_lower or "reunion" in user_lower or "calendario" in user_lower or "agendar" in user_lower or "checkpoint" in user_lower:
+    # 8. Reuniones y calendario
+    elif any(k in user_lower for k in ["reunión", "reunion", "calendario", "agendar", "checkpoint"]):
         m_args = {
             "title": "Checkpoint de Avance & Riesgos",
             "sim_date": "Día 5 (16 Sep)",
@@ -598,22 +655,10 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
         m_res = execute_tool(workspace_id, "schedule_meeting", m_args)
         executed_tools.append({"tool": "schedule_meeting", "args": m_args})
         tool_results.append({"tool": "schedule_meeting", "result": m_res})
-        final_text = "Agendé la sesión en el calendario. Puedes ver los detalles en la pestaña **Calendario & Decisiones**."
-
-    # 8. Solicitud de aprobación / Gobernanza
-    elif "contratar" in user_lower or "decisión" in user_lower or "decision" in user_lower or "aprobación" in user_lower or "aprobar" in user_lower:
-        d_args = {
-            "title": "Aprobación: Contratación de Senior Mobile Dev",
-            "description": "Requerimiento de app nativa en React Native. El equipo actual está a tope con backend y web.",
-            "impact_summary": "+$4,200 USD / Asegura entrega en 3 semanas."
-        }
-        d_res = execute_tool(workspace_id, "request_managerial_approval", d_args)
-        executed_tools.append({"tool": "request_managerial_approval", "args": d_args})
-        tool_results.append({"tool": "request_managerial_approval", "result": d_res})
-        final_text = "Creé una solicitud de aprobación para la Dirección en la pestaña **Calendario & Decisiones**. Échale un ojo para aprobarla o rechazarla."
+        final_text = "Agendé la sesión en el calendario. Puedes ver los detalles en la pestaña **3. Mi Calendario**."
 
     # 9. Daily Standup
-    elif "standup" in user_lower or "daily" in user_lower or "estado" in user_lower or "cómo vamos" in user_lower:
+    elif any(k in user_lower for k in ["standup", "daily", "estado del sprint", "como vamos", "cómo vamos"]):
         s_res = execute_tool(workspace_id, "generate_daily_standup_report", {})
         executed_tools.append({"tool": "generate_daily_standup_report", "args": {}})
         tool_results.append({"tool": "generate_daily_standup_report", "result": s_res})
@@ -628,9 +673,14 @@ async def run_simulated_fallback(workspace_id: str, user_message: str, system_pr
             final_text = "\n".join(lines)
 
     else:
-        final_text = "Entendido. Puedes pedirme: *'Definir un nuevo proyecto'*, *'Revisar carga del personal'*, *'Planificar el sprint'* o *'Daily standup'*."
+        # Contextual response
+        t_count = len(talents)
+        p_count = len(projects)
+        task_count = len(tasks)
+        final_text = f"Entendido. Como PM del equipo (tenemos {t_count} desarrollador(es) y {task_count} tarea(s) en Kanban), te recomiendo: definir el alcance, revisar la carga del personal o consultar las sugerencias autónomas."
 
     agent_msg_id = f"msg-hermes-{int(time.time()*1000)}"
+    conn = get_db_connection()
     conn.execute("""
     INSERT INTO chat_messages (id, workspace_id, sender, sender_name, content, message_type, metadata, created_at)
     VALUES (?, ?, 'hermes', 'Hermes (PM)', ?, 'chat', ?, ?);
