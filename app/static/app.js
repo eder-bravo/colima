@@ -3,10 +3,9 @@
 const STORAGE_KEYS = {
   WORKSPACE_ID: 'colima_workspace_id',
   API_KEY: 'colima_gemini_api_key',
-  THEME_PREF: 'colima_theme_pref' // 'system', 'light', 'dark'
+  THEME_PREF: 'colima_theme_pref'
 };
 
-// Workspace ID
 let workspaceId = localStorage.getItem(STORAGE_KEYS.WORKSPACE_ID);
 if (!workspaceId) {
   workspaceId = 'ws-' + Math.random().toString(36).substring(2, 10);
@@ -58,13 +57,12 @@ const skillModal = document.getElementById('skill-modal');
 const skillModalTitle = document.getElementById('skill-modal-title');
 const skillModalPrompt = document.getElementById('skill-modal-prompt');
 
-// 1. THEME ENGINE (System-based default + Manual Toggle)
+// 1. THEME ENGINE
 function initTheme() {
   const savedPref = localStorage.getItem(STORAGE_KEYS.THEME_PREF) || 'system';
   applyTheme(savedPref);
 
-  // Listen to OS system theme changes
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if ((localStorage.getItem(STORAGE_KEYS.THEME_PREF) || 'system') === 'system') {
       applyTheme('system');
     }
@@ -106,7 +104,7 @@ function applyTheme(pref) {
 // 2. STAGE TABS
 function switchStage(stage) {
   document.querySelectorAll('.stage-tab').forEach(tab => {
-    tab.className = 'stage-tab font-medium text-xs px-3.5 py-2 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5';
+    tab.className = 'stage-tab font-medium text-xs px-3.5 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5';
   });
   document.querySelectorAll('.stage-view').forEach(view => view.classList.add('hidden'));
 
@@ -114,7 +112,7 @@ function switchStage(stage) {
   const activeView = document.getElementById(`stage-${stage}`);
 
   if (activeTab && activeView) {
-    activeTab.className = 'stage-tab font-semibold text-xs px-3.5 py-2 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5';
+    activeTab.className = 'stage-tab font-semibold text-xs px-3.5 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs';
     activeView.classList.remove('hidden');
   }
 }
@@ -129,7 +127,7 @@ function setupSSE() {
         renderClockState(payload.data);
         loadWorkspaceData(false);
       } else if (payload.type === 'global_event') {
-        appendSystemMessage(`🚨 **EVENTO GLOBAL DEL TALLER:** ${payload.event.title}\n\n${payload.event.description}`);
+        appendSystemMessage(`🚨 **EVENTO:** ${payload.event.title}\n${payload.event.description}`);
       }
     } catch (e) {
       console.error(e);
@@ -154,7 +152,7 @@ function renderClockState(state) {
     simSpeedBadge.className = 'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
     clockPulse.classList.add('hidden');
   } else {
-    simSpeedBadge.textContent = `${speed}x Vel.`;
+    simSpeedBadge.textContent = `${speed}x`;
     simSpeedBadge.className = 'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30';
     clockPulse.classList.remove('hidden');
   }
@@ -198,9 +196,10 @@ function renderKanban(tasks) {
     counts[status]++;
 
     const card = document.createElement('div');
-    card.className = 'bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-sm space-y-2';
+    // CLEAN WHITE CARD in Light Mode, DARK SLATE in Dark Mode
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-3 shadow-xs space-y-2 transition hover:shadow-sm';
 
-    let priorityBadge = '<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-500">Normal</span>';
+    let priorityBadge = '<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">Normal</span>';
     if (task.priority === 'urgent') {
       priorityBadge = '<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">Urgente</span>';
     } else if (task.priority === 'high') {
@@ -208,33 +207,43 @@ function renderKanban(tasks) {
     }
 
     card.innerHTML = `
-      <div class="flex items-start justify-between gap-1">
-        <h4 class="font-bold text-xs text-slate-900 dark:text-white leading-snug">${escapeHtml(task.title)}</h4>
+      <div class="flex items-start justify-between gap-1.5">
+        <h4 class="font-semibold text-xs text-slate-800 dark:text-slate-100 leading-snug">${escapeHtml(task.title)}</h4>
         ${priorityBadge}
       </div>
-      <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">${escapeHtml(task.description || '')}</p>
       
       <!-- Progress Bar -->
-      <div class="space-y-1 pt-1">
-        <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+      <div class="space-y-1">
+        <div class="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">
           <span>${task.completed_hours}h / ${task.estimated_hours}h</span>
           <span class="font-bold text-indigo-600 dark:text-indigo-400">${task.progress_percent}%</span>
         </div>
-        <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+        <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
           <div class="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full task-progress-bar" style="width: ${task.progress_percent}%"></div>
         </div>
       </div>
 
-      <!-- Assignee Footer -->
-      <div class="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-800/60 text-[10px]">
-        <span class="text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1">
+      <!-- Footer Assignee & Role -->
+      <div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
+        <span class="text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 rounded">
           <i class="fa-solid fa-user-circle text-indigo-500"></i> ${escapeHtml(task.assignee_name || 'Sin asignar')}
         </span>
-        <span class="text-slate-400">${escapeHtml(task.role_required)}</span>
+        <span class="text-slate-400 font-medium">${escapeHtml(task.role_required)}</span>
       </div>
     `;
 
     cols[status].appendChild(card);
+  });
+
+  // Empty state if column has 0 tasks
+  Object.keys(cols).forEach(key => {
+    if (counts[key] === 0) {
+      cols[key].innerHTML = `
+        <div class="h-24 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-600">
+          Sin tareas
+        </div>
+      `;
+    }
   });
 
   document.getElementById('count-backlog').textContent = counts.backlog;
@@ -251,25 +260,24 @@ function renderSkills(skills) {
   skills.forEach(skill => {
     if (skill.is_active) activeCount++;
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3';
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-2.5';
     
     card.innerHTML = `
       <div class="flex items-start justify-between">
         <div class="flex items-center space-x-2.5">
-          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-bold">
+          <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">
             <i class="fa-solid ${skill.icon || 'fa-brain'}"></i>
           </div>
           <div>
             <h4 class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(skill.name)}</h4>
-            <span class="text-[10px] text-slate-400 font-mono">${escapeHtml(skill.id)}</span>
           </div>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" ${skill.is_active ? 'checked' : ''} onchange="toggleSkill('${skill.id}', this.checked)" class="sr-only peer">
-          <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+          <div class="w-8 h-4.5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-indigo-600"></div>
         </label>
       </div>
-      <p class="text-xs text-slate-600 dark:text-slate-300">${escapeHtml(skill.description)}</p>
+      <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHtml(skill.description)}</p>
       
       <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[11px]">
         <button onclick="openSkillModal('${skill.id}', '${escapeHtml(skill.name)}', '${escapeHtml(skill.prompt_instructions)}')" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1">
@@ -295,7 +303,7 @@ async function toggleSkill(skillId, isActive) {
     });
     loadWorkspaceData(false);
   } catch (e) {
-    alert('Error actualizando habilidad: ' + e.message);
+    alert('Error: ' + e.message);
   }
 }
 
@@ -342,7 +350,7 @@ function renderTalentPool(talent) {
 
   talent.forEach(p => {
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-2';
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-2';
     
     let seniorityBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">Mid</span>';
     if (p.seniority === 'Senior') {
@@ -366,8 +374,8 @@ function renderTalentPool(talent) {
       <div class="flex flex-wrap gap-1 pt-1">
         ${skillsPills}
       </div>
-      <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400">
-        <span>Factor Productividad: <b>${p.productivity_factor}x</b></span>
+      <div class="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400">
+        <span>Productividad: <b>${p.productivity_factor}x</b></span>
         <span class="text-emerald-500 font-medium">● Disponible</span>
       </div>
     `;
@@ -379,20 +387,20 @@ function renderTalentPool(talent) {
 function renderDecisions(decisions) {
   decisionsContainer.innerHTML = '';
   if (decisions.length === 0) {
-    decisionsContainer.innerHTML = '<p class="text-slate-400 text-xs py-2">No hay solicitudes de aprobación pendientes de la Dirección.</p>';
+    decisionsContainer.innerHTML = '<p class="text-slate-400 text-xs py-2">No hay solicitudes de aprobación pendientes.</p>';
     return;
   }
 
   decisions.forEach(d => {
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-500/40 rounded-2xl p-4 shadow-sm space-y-2';
+    card.className = 'bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-500/40 rounded-2xl p-4 shadow-xs space-y-2';
 
     let actionButtons = `
       <div class="flex items-center space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
         <button onclick="respondDecision('${d.id}', 'approved')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs transition flex items-center gap-1">
-          <i class="fa-solid fa-check"></i> Aprobar Decisión
+          <i class="fa-solid fa-check"></i> Aprobar
         </button>
-        <button onclick="respondDecision('${d.id}', 'rejected')" class="bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-700 dark:text-rose-300 font-semibold px-3 py-1.5 rounded-xl text-xs transition flex items-center gap-1">
+        <button onclick="respondDecision('${d.id}', 'rejected')" class="bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-600 dark:text-rose-300 font-semibold px-3 py-1.5 rounded-xl text-xs transition flex items-center gap-1">
           <i class="fa-solid fa-xmark"></i> Rechazar
         </button>
       </div>
@@ -402,7 +410,7 @@ function renderDecisions(decisions) {
       actionButtons = `
         <div class="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
           <span class="font-bold ${d.status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}">
-            ● Decisión ${d.status === 'approved' ? 'Aprobada' : 'Rechazada'} por el Gerente
+            ● Decisión ${d.status === 'approved' ? 'Aprobada' : 'Rechazada'}
           </span>
         </div>
       `;
@@ -416,7 +424,7 @@ function renderDecisions(decisions) {
         <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">Escalación</span>
       </div>
       <p class="text-xs text-slate-700 dark:text-slate-200">${escapeHtml(d.description)}</p>
-      <div class="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl text-[11px] text-slate-600 dark:text-slate-300">
+      <div class="bg-slate-50 dark:bg-slate-950 p-2 rounded-xl text-[11px] text-slate-600 dark:text-slate-300">
         <b>Impacto:</b> ${escapeHtml(d.impact_summary)}
       </div>
       ${actionButtons}
@@ -434,27 +442,27 @@ async function respondDecision(decId, status) {
     });
     loadWorkspaceData();
   } catch (e) {
-    alert('Error respondiendo decisión: ' + e.message);
+    alert('Error: ' + e.message);
   }
 }
 
 function renderCalendar(events) {
   calendarContainer.innerHTML = '';
   if (events.length === 0) {
-    calendarContainer.innerHTML = '<p class="col-span-2 text-slate-400 text-xs py-2">No hay reuniones agendadas en el calendario aún.</p>';
+    calendarContainer.innerHTML = '<p class="col-span-2 text-slate-400 text-xs py-2">No hay reuniones agendadas aún.</p>';
     return;
   }
 
   events.forEach(evt => {
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-1.5';
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-1';
     card.innerHTML = `
       <div class="flex items-center justify-between">
         <h4 class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(evt.title)}</h4>
         <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">${escapeHtml(evt.time_slot)}</span>
       </div>
       <p class="text-[11px] text-slate-500 font-medium">📅 ${escapeHtml(evt.sim_date)} • 👥 ${escapeHtml(evt.attendees)}</p>
-      <p class="text-xs text-slate-600 dark:text-slate-300 pt-1">${escapeHtml(evt.agenda || '')}</p>
+      <p class="text-xs text-slate-600 dark:text-slate-300 pt-0.5">${escapeHtml(evt.agenda || '')}</p>
     `;
     calendarContainer.appendChild(card);
   });
@@ -470,13 +478,13 @@ function renderTrajectories(trajs) {
 
   trajs.forEach(t => {
     const item = document.createElement('div');
-    item.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2 shadow-sm';
+    item.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2 shadow-xs';
     
     let toolsHtml = '';
     if (t.tool_calls && t.tool_calls.length > 0) {
       toolsHtml = `
         <div class="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
-          <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">Herramientas Ejecutadas:</span>
+          <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">Herramientas:</span>
           ${t.tool_calls.map(tc => `<div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">▶ ${tc.tool}(${JSON.stringify(tc.args)})</div>`).join('')}
         </div>
       `;
@@ -487,7 +495,7 @@ function renderTrajectories(trajs) {
         <span class="font-bold text-indigo-500">Turno de Usuario</span>
         <span>${new Date(t.created_at).toLocaleTimeString()}</span>
       </div>
-      <p class="text-xs text-slate-800 dark:text-slate-200 font-sans"><b>Prompt:</b> "${escapeHtml(t.prompt_used)}"</p>
+      <p class="text-xs text-slate-800 dark:text-slate-200 font-sans">"${escapeHtml(t.prompt_used)}"</p>
       ${toolsHtml}
       <div class="text-xs text-slate-600 dark:text-slate-300">
         <span class="text-indigo-500 font-bold">Respuesta:</span>
@@ -498,13 +506,13 @@ function renderTrajectories(trajs) {
   });
 }
 
-// 10. Chat Message Handlers
+// 10. Chat Handlers
 function renderChatHistory(messages) {
   chatMessagesEl.innerHTML = '';
   messages.forEach(m => {
     if (m.sender === 'user') appendUserMessage(m.content, false);
     else if (m.sender === 'system') appendSystemMessage(m.content, false);
-    else appendAssistantMessage(m.content, false, m.metadata ? JSON.parse(m.metadata) : null);
+    else appendAssistantMessage(m.content, false);
   });
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
@@ -513,7 +521,7 @@ function appendUserMessage(text, scroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start justify-end space-x-2';
   div.innerHTML = `
-    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm p-3 max-w-[85%] shadow-sm leading-relaxed text-xs">
+    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-xs p-3 max-w-[85%] shadow-xs leading-relaxed text-xs">
       <p>${escapeHtml(text)}</p>
     </div>
   `;
@@ -521,25 +529,15 @@ function appendUserMessage(text, scroll = true) {
   if (scroll) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
-function appendAssistantMessage(text, scroll = true, metadata = null) {
+function appendAssistantMessage(text, scroll = true) {
   const div = document.createElement('div');
-  div.className = 'flex items-start space-x-2.5';
+  div.className = 'flex items-start space-x-2';
   
-  let toolBadges = '';
-  if (metadata && metadata.tools && metadata.tools.length > 0) {
-    toolBadges = `
-      <div class="flex flex-wrap gap-1 mb-1.5">
-        ${metadata.tools.map(t => `<span class="text-[9px] bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 px-1.5 py-0.5 rounded font-mono font-medium">⚡ ${t.tool}</span>`).join('')}
-      </div>
-    `;
-  }
-
   div.innerHTML = `
-    <div class="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 text-xs">
+    <div class="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 text-[11px]">
       H
     </div>
-    <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm p-3 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-sm leading-relaxed chat-body text-xs">
-      ${toolBadges}
+    <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl rounded-tl-xs p-3 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-xs leading-relaxed chat-body text-xs">
       <p class="whitespace-pre-line">${escapeHtml(text)}</p>
     </div>
   `;
@@ -549,9 +547,9 @@ function appendAssistantMessage(text, scroll = true, metadata = null) {
 
 function appendSystemMessage(text, scroll = true) {
   const div = document.createElement('div');
-  div.className = 'flex justify-center my-2';
+  div.className = 'flex justify-center my-1.5';
   div.innerHTML = `
-    <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-xs px-3 py-2 rounded-xl max-w-[92%] text-center">
+    <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-xs px-3 py-1.5 rounded-xl max-w-[92%] text-center">
       <p class="whitespace-pre-line">${escapeHtml(text)}</p>
     </div>
   `;
@@ -573,7 +571,7 @@ function setupEventListeners() {
     const typingIndicator = document.createElement('div');
     typingIndicator.id = 'typing-indicator';
     typingIndicator.className = 'flex items-center space-x-2 text-slate-400 text-xs p-2';
-    typingIndicator.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-indigo-500"></i> <span>Hermes está razonando y ejecutando herramientas...</span>';
+    typingIndicator.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-indigo-500"></i> <span>Hermes está pensando...</span>';
     chatMessagesEl.appendChild(typingIndicator);
     chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 
@@ -589,7 +587,7 @@ function setupEventListeners() {
 
       const data = await res.json();
       typingIndicator.remove();
-      appendAssistantMessage(data.response, true, { tools: data.tools_executed });
+      appendAssistantMessage(data.response, true);
       loadWorkspaceData(false);
     } catch (err) {
       typingIndicator.remove();
@@ -625,7 +623,7 @@ function setupEventListeners() {
     try {
       const res = await fetch(`/api/workspaces/${workspaceId}/setup-demo`, { method: 'POST' });
       if (res.ok) {
-        appendSystemMessage('⚡ Se han cargado 5 perfiles de desarrolladores en el ATS listos para asignación.');
+        appendSystemMessage('⚡ 5 desarrolladores cargados en el ATS.');
         loadWorkspaceData();
       }
     } catch (e) {
@@ -661,10 +659,10 @@ async function uploadFiles(files) {
       });
       const data = await res.json();
       if (res.ok) {
-        appendSystemMessage(`📄 CV de **${data.profile.name}** (${data.profile.role} - ${data.profile.seniority}) procesado.`);
+        appendSystemMessage(`📄 CV de **${data.profile.name}** procesado.`);
       }
     } catch (err) {
-      alert(`Error subiendo ${file.name}: ${err.message}`);
+      alert(`Error: ${err.message}`);
     }
   }
   loadWorkspaceData();
