@@ -404,7 +404,7 @@ def strip_thinking_tokens(text: str) -> str:
         'the user might', 'the user seem', 'the user has',
         'as hermes', 'as a pm', 'as the pm', 'as an ai', 'as a technical pm',
         'i should', "i'll ", 'i will ', 'i need to ', 'i must ',
-        'i already', 'i can ', 'i am hermes',
+        'i already', 'i can ', 'i am hermes', 'i have access', 'i have the ',
         'plan:', 'plan:\n',
         '* user says:', '* context:', '* goal:', '* tone:', '* constraint:',
         '* action:', '* direct?', '* concise?', '* friendly?',
@@ -414,8 +414,12 @@ def strip_thinking_tokens(text: str) -> str:
         'response strategy:', 'my response:', 'response:',
         'reasoning:', 'thinking:', 'analysis:',
         'maintaining the persona', 'maintaining persona',
-        'this is a greeting', 'this is a simple',
+        'this is a greeting', 'this is a simple', 'this is a follow',
         "here's my response", 'here is my response',
+        'looking at the system', 'looking at the available', 'looking at my',
+        'my persona is', 'the system prompt', 'the system instructions',
+        'given the context', 'given that', 'based on the system',
+        'i have a tool', '- i have a tool', '- my persona',
     ]
 
     # Numbered reasoning lines: "1. Acknowledge", "2. Briefly", etc. (only in reasoning context)
@@ -549,36 +553,43 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     final_text = ""
     thinking_text = "Evaluando contexto del sprint con modelo de IA..."
 
+    print(f"[AGENT] api_key present={bool(api_key and len(api_key.strip())>10)}, len={len(api_key.strip()) if api_key else 0}")
+    print(f"[AGENT] workspace={workspace_id} msg={user_message[:40]!r}")
+
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             res = None
             for model_name in CANDIDATE_MODELS:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-                res = await client.post(url, headers=headers, json=payload)
+                print(f"[AGENT] Trying model: {model_name}")
+                
+                is_gemma = model_name.lower().startswith("gemma")
+
+                if is_gemma:
+                    # Gemma: embed system prompt + user message directly (no tools, no system_instruction wrapper)
+                    # Gemma can't reliably emit functionCall JSON, so we give it all context inline
+                    gemma_contents = [{"role": "user", "parts": [{"text": f"{system_instruction}\n\n[Mensaje del Usuario]: {user_message}"}]}]
+                    use_payload = {
+                        "contents": gemma_contents,
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 600}
+                    }
+                else:
+                    use_payload = payload
+
+                res = await client.post(url, headers=headers, json=use_payload)
+                print(f"[AGENT] {model_name} → HTTP {res.status_code}")
                 if res.status_code == 200:
                     break
-                print(f"[{model_name} standard call failed with {res.status_code}]: {res.text[:150]}")
-                
-                # If 400 error (e.g. Gemma doesn't accept tools or system_instruction format), retry in standard prompt mode
-                if res.status_code == 400:
-                    gemma_contents = [{"role": "user", "parts": [{"text": f"{system_instruction}\n\n[Mensaje del Usuario]: {user_message}"}]}]
-                    gemma_payload = {
-                        "contents": gemma_contents,
-                        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 800}
-                    }
-                    res_gemma = await client.post(url, headers=headers, json=gemma_payload)
-                    if res_gemma.status_code == 200:
-                        res = res_gemma
-                        break
-                    else:
-                        print(f"[{model_name} gemma_payload failed with {res_gemma.status_code}]: {res_gemma.text[:150]}")
+                print(f"[AGENT] {model_name} failed {res.status_code}: {res.text[:200]}")
 
             if not res or res.status_code != 200:
+                print(f"[AGENT] All models failed → smart fallback")
                 return await run_smart_fallback(workspace_id, user_message, system_instruction)
             
             data = res.json()
             candidates = data.get("candidates", [])
             if not candidates:
+                print(f"[AGENT] No candidates in response → smart fallback")
                 return await run_smart_fallback(workspace_id, user_message, system_instruction)
             
             content_resp = candidates[0].get("content", {})
@@ -588,8 +599,10 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
             text_parts = [p.get("text") for p in parts if "text" in p]
             
             if text_parts:
-                final_text = "\n".join(text_parts)
-                final_text = strip_thinking_tokens(final_text)
+                raw_text = "\n".join(text_parts)
+                print(f"[AGENT] raw_text (first 300): {raw_text[:300]!r}")
+                final_text = strip_thinking_tokens(raw_text)
+                print(f"[AGENT] stripped (first 200): {final_text[:200]!r}")
 
             if func_calls:
                 contents.append({"role": "model", "parts": parts})
