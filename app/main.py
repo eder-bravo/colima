@@ -11,11 +11,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.db import init_db, get_db_connection, ensure_workspace_skills
+from app.db import (
+    init_db, get_db_connection, ensure_workspace_skills,
+    reset_workspace, get_inbox_messages, push_inbox_message, mark_inbox_read
+)
 from app.clock import sim_engine
 from app.generator_assets import generate_all_samples, SAMPLES_DIR
 from app.ats import parse_cv_pdf
-from app.agent import run_hermes_agent, execute_tool
+from app.agent import run_hermes_agent, execute_tool, run_autonomous_pm_loop
 
 INSTRUCTOR_PIN_FILE = os.getenv("INSTRUCTOR_PIN_FILE", "/run/secrets/instructor_pin")
 
@@ -33,13 +36,16 @@ async def lifespan(app: FastAPI):
     init_db()
     generate_all_samples()
     loop_task = asyncio.create_task(sim_engine.run_loop())
+    pm_loop_task = asyncio.create_task(run_autonomous_pm_loop(sim_engine))
     yield
     sim_engine.is_running = False
     loop_task.cancel()
-    try:
-        await loop_task
-    except asyncio.CancelledError:
-        pass
+    pm_loop_task.cancel()
+    for t in [loop_task, pm_loop_task]:
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(
     title="Colima — Asistentes PM Autónomos con IA",
@@ -435,6 +441,64 @@ async def clear_chat_history(workspace_id: str):
     conn.commit()
     conn.close()
     return {"status": "cleared"}
+
+
+@app.post("/api/workspaces/{workspace_id}/reset")
+async def reset_workspace_endpoint(workspace_id: str):
+    """Full workspace reset — wipes all data and re-initializes defaults."""
+    ensure_workspace(workspace_id)
+    reset_workspace(workspace_id)
+    return {"status": "reset", "workspace_id": workspace_id}
+
+
+# ==================== Hermes Inbox (Autonomous PM Messages) ====================
+
+@app.get("/api/workspaces/{workspace_id}/inbox")
+async def get_inbox(workspace_id: str, unread_only: bool = False):
+    ensure_workspace(workspace_id)
+    messages = get_inbox_messages(workspace_id, unread_only=unread_only)
+    unread_count = sum(1 for m in messages if not m["read"])
+    return {"messages": messages, "unread_count": unread_count}
+
+
+class MarkReadRequest(BaseModel):
+    msg_id: Optional[str] = None  # None = mark all read
+
+@app.post("/api/workspaces/{workspace_id}/inbox/mark-read")
+async def mark_inbox_read_endpoint(workspace_id: str, req: MarkReadRequest):
+    mark_inbox_read(workspace_id, req.msg_id)
+    return {"status": "ok"}
+
+
+@app.delete("/api/workspaces/{workspace_id}/inbox/clear")
+async def clear_inbox_endpoint(workspace_id: str):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM hermes_inbox WHERE workspace_id = ?;", (workspace_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "cleared"}
+
+
+# ==================== Student Time Controls ====================
+
+class StudentSpeedRequest(BaseModel):
+    speed_multiplier: float
+    instructor_pin: str
+
+@app.post("/api/workspaces/{workspace_id}/time/speed")
+async def student_set_speed(workspace_id: str, req: StudentSpeedRequest):
+    """Allow students to control sim speed (requires instructor PIN)."""
+    verify_pin(req.instructor_pin)
+    state = sim_engine.set_speed(req.speed_multiplier)
+    return {"status": "ok", "state": state}
+
+@app.post("/api/workspaces/{workspace_id}/time/step-day")
+async def student_step_day(workspace_id: str, req: InstructorAuth):
+    """Allow students to advance sim by 1 day (requires instructor PIN)."""
+    verify_pin(req.pin)
+    state = sim_engine.step_day(1)
+    return {"status": "ok", "state": state}
+
 
 
 @app.get("/api/samples/{filename}")

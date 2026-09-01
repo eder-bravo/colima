@@ -245,6 +245,20 @@ def init_db():
     );
     """)
 
+    # Hermes Autonomous Inbox (proactive PM messages)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS hermes_inbox (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'insight',
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
+        sim_time TEXT,
+        created_at TEXT NOT NULL
+    );
+    """)
+
     conn.commit()
     conn.close()
 
@@ -331,3 +345,60 @@ def ensure_workspace(workspace_id: str, name: str = "Alumno"):
 
 def ensure_workspace_skills(workspace_id: str):
     ensure_workspace(workspace_id)
+
+def reset_workspace(workspace_id: str):
+    """Wipe all workspace data and re-initialize with defaults."""
+    conn = get_db_connection()
+    conn.execute("DELETE FROM chat_messages WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM tasks WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM managerial_decisions WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM calendar_events WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM pm_suggestions WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM hermes_inbox WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM agent_trajectories WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM projects WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute("DELETE FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,))
+    conn.execute(
+        "UPDATE workspaces SET project_name = NULL, project_description = NULL, custom_prompt = '' WHERE id = ?;",
+        (workspace_id,)
+    )
+    conn.commit()
+    conn.close()
+    # Re-init defaults (skills, default project)
+    ensure_workspace(workspace_id)
+
+def get_inbox_messages(workspace_id: str, unread_only: bool = False) -> list:
+    conn = get_db_connection()
+    if unread_only:
+        rows = conn.execute(
+            "SELECT * FROM hermes_inbox WHERE workspace_id = ? AND read = 0 ORDER BY created_at DESC LIMIT 50;",
+            (workspace_id,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM hermes_inbox WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 100;",
+            (workspace_id,)
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def push_inbox_message(workspace_id: str, msg_type: str, title: str, body: str, sim_time: str = None) -> dict:
+    conn = get_db_connection()
+    msg_id = f"inbox-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}"
+    now = datetime.utcnow().isoformat()
+    conn.execute(
+        "INSERT INTO hermes_inbox (id, workspace_id, type, title, body, read, sim_time, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?);",
+        (msg_id, workspace_id, msg_type, title, body, sim_time, now)
+    )
+    conn.commit()
+    conn.close()
+    return {"id": msg_id, "workspace_id": workspace_id, "type": msg_type, "title": title, "body": body, "read": 0, "sim_time": sim_time, "created_at": now}
+
+def mark_inbox_read(workspace_id: str, msg_id: str = None):
+    conn = get_db_connection()
+    if msg_id:
+        conn.execute("UPDATE hermes_inbox SET read = 1 WHERE id = ? AND workspace_id = ?;", (msg_id, workspace_id))
+    else:
+        conn.execute("UPDATE hermes_inbox SET read = 1 WHERE workspace_id = ?;", (workspace_id,))
+    conn.commit()
+    conn.close()

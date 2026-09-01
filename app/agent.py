@@ -1,3 +1,4 @@
+import os
 import json
 import re
 import uuid
@@ -928,3 +929,218 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
         "tool_results": tool_results,
         "thinking": thinking
     }
+
+
+# ==================== Autonomous PM Background Loop ====================
+
+import asyncio
+
+AUTONOMOUS_INTERVAL_SECONDS = 30  # Real seconds between analysis runs
+
+async def run_autonomous_pm_loop(sim_engine_ref):
+    """
+    Runs every AUTONOMOUS_INTERVAL_SECONDS. For each active workspace
+    (one with recent chat activity), evaluates workspace state and pushes
+    proactive insight messages to hermes_inbox via the LLM.
+    Only calls the model when a real condition is detected — cheap by design.
+    """
+    from app.db import get_db_connection, push_inbox_message
+
+    print("[AUTONOMOUS] PM loop started.")
+    while True:
+        try:
+            await asyncio.sleep(AUTONOMOUS_INTERVAL_SECONDS)
+            sim_state = sim_engine_ref.get_state()
+            sim_time = sim_state.get("formatted_time", "Desconocido")
+
+            conn = get_db_connection()
+            # Find workspaces with chat activity in the last 2 hours
+            cutoff = datetime.utcnow().replace(microsecond=0).isoformat()
+            active_ws = conn.execute("""
+                SELECT DISTINCT workspace_id FROM chat_messages
+                WHERE created_at >= datetime(?, '-120 minutes')
+                LIMIT 30;
+            """, (cutoff,)).fetchall()
+            conn.close()
+
+            for row in active_ws:
+                workspace_id = row["workspace_id"]
+                try:
+                    await _analyze_and_push(workspace_id, sim_time, sim_engine_ref)
+                except Exception as e:
+                    print(f"[AUTONOMOUS] Error analyzing {workspace_id}: {e}")
+
+        except asyncio.CancelledError:
+            print("[AUTONOMOUS] PM loop cancelled.")
+            break
+        except Exception as e:
+            print(f"[AUTONOMOUS] Loop error: {e}")
+            await asyncio.sleep(5)
+
+
+async def _analyze_and_push(workspace_id: str, sim_time: str, sim_engine_ref):
+    """Analyze one workspace and push inbox messages if conditions warrant it."""
+    from app.db import get_db_connection, push_inbox_message
+
+    conn = get_db_connection()
+    talents = conn.execute(
+        "SELECT id, name, role, seniority FROM talent_profiles WHERE workspace_id = ?;",
+        (workspace_id,)
+    ).fetchall()
+    tasks = conn.execute(
+        "SELECT id, title, assignee_name, estimated_hours, completed_hours, status, blocker_reason, priority FROM tasks WHERE workspace_id = ?;",
+        (workspace_id,)
+    ).fetchall()
+    projects = conn.execute(
+        "SELECT id, title, target_deadline, status FROM projects WHERE workspace_id = ? AND status = 'active';",
+        (workspace_id,)
+    ).fetchall()
+    recent_inbox = conn.execute(
+        "SELECT title FROM hermes_inbox WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 10;",
+        (workspace_id,)
+    ).fetchall()
+    conn.close()
+
+    recent_titles = {r["title"] for r in recent_inbox}
+
+    findings = []
+
+    # ── Condition 1: No team + active project
+    if len(talents) == 0 and len(projects) > 0:
+        title = "Sin equipo asignado al proyecto"
+        if title not in recent_titles:
+            findings.append({
+                "type": "alerta",
+                "title": title,
+                "context": f"Proyecto activo '{projects[0]['title']}' pero sin desarrolladores cargados en el ATS."
+            })
+
+    # ── Condition 2: Worker overload (>30h)
+    workload: dict[str, float] = {}
+    for t in talents:
+        workload[t["name"]] = 0.0
+    for task in tasks:
+        if task["assignee_name"] and task["assignee_name"] in workload:
+            workload[task["assignee_name"]] += task["estimated_hours"]
+    for name, hrs in workload.items():
+        if hrs > 30.0:
+            title = f"Sobrecarga detectada: {name}"
+            if title not in recent_titles:
+                findings.append({
+                    "type": "alerta",
+                    "title": title,
+                    "context": f"{name} tiene {hrs:.0f}h asignadas (límite saludable: 30h). Riesgo de burnout."
+                })
+
+    # ── Condition 3: Blocked tasks
+    blocked = [t for t in tasks if t["blocker_reason"]]
+    if blocked:
+        title = f"{len(blocked)} tarea(s) bloqueada(s)"
+        if title not in recent_titles:
+            sample = blocked[0]
+            findings.append({
+                "type": "alerta",
+                "title": title,
+                "context": f"'{sample['title']}' está bloqueada: {sample['blocker_reason']}. Acción inmediata requerida."
+            })
+
+    # ── Condition 4: Active project with zero tasks
+    if len(projects) > 0 and len(tasks) == 0:
+        title = "Proyecto sin tareas planificadas"
+        if title not in recent_titles:
+            findings.append({
+                "type": "sugerencia",
+                "title": title,
+                "context": f"'{projects[0]['title']}' no tiene tareas en el Kanban. Es momento de planificar el sprint inicial."
+            })
+
+    # ── Condition 5: All tasks done / sprint complete
+    if len(tasks) > 0 and all(t["status"] == "done" for t in tasks):
+        title = "Sprint completado — ¿Lanzamos?"
+        if title not in recent_titles:
+            findings.append({
+                "type": "insight",
+                "title": title,
+                "context": f"Todas las tareas del proyecto están en 'done'. El equipo está listo para el siguiente hito."
+            })
+
+    # ── Condition 6: High priority task unassigned
+    unassigned_high = [t for t in tasks if t["priority"] == "high" and not t["assignee_name"]]
+    if unassigned_high:
+        title = f"Tarea crítica sin asignar"
+        if title not in recent_titles:
+            findings.append({
+                "type": "alerta",
+                "title": title,
+                "context": f"'{unassigned_high[0]['title']}' es alta prioridad y no tiene responsable asignado."
+            })
+
+    if not findings:
+        return
+
+    # Resolve API key for autonomous call
+    api_key = None
+    secret_path = "/run/secrets/gemini_api_key"
+    if os.path.exists(secret_path):
+        try:
+            with open(secret_path, "r") as f:
+                api_key = f.read().strip() or None
+        except Exception:
+            pass
+    if not api_key:
+        api_key = os.getenv("GEMINI_API_KEY")
+
+    for finding in findings[:3]:  # Max 3 per cycle to avoid spam
+        body = await _generate_inbox_message(finding, api_key)
+        msg = push_inbox_message(
+            workspace_id=workspace_id,
+            msg_type=finding["type"],
+            title=finding["title"],
+            body=body,
+            sim_time=sim_time
+        )
+        # Broadcast SSE so the frontend badge updates immediately
+        try:
+            sim_engine_ref.broadcast({
+                "type": "inbox_update",
+                "workspace_id": workspace_id,
+                "msg": msg
+            })
+        except Exception:
+            pass
+        print(f"[AUTONOMOUS] Pushed inbox msg to {workspace_id}: {finding['title']}")
+
+
+async def _generate_inbox_message(finding: dict, api_key: Optional[str]) -> str:
+    """Call LLM to write the inbox body in natural Spanish PM tone. Falls back to context string."""
+    if not api_key:
+        return finding["context"]
+
+    prompt = f"""Eres Hermes, un PM autónomo. Escribe un mensaje corto (2-3 oraciones, sin saludos, en español natural de PM) para notificar al product manager sobre lo siguiente:
+
+Título: {finding['title']}
+Contexto: {finding['context']}
+
+El mensaje debe ser directo, accionable y profesional. No uses asteriscos ni markdown."""
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+                headers={"X-Goog-Api-Key": api_key, "Content-Type": "application/json"},
+                json={
+                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 150}
+                }
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    text = "".join(p.get("text", "") for p in parts).strip()
+                    return text or finding["context"]
+    except Exception as e:
+        print(f"[AUTONOMOUS] LLM call failed: {e}")
+
+    return finding["context"]

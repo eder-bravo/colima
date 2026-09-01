@@ -135,6 +135,10 @@ function setupSSE() {
         loadWorkspaceData(false);
       } else if (payload.type === 'global_event') {
         appendSystemMessage(`🚨 **EVENTO:** ${payload.event.title}\n${payload.event.description}`);
+      } else if (payload.type === 'inbox_update') {
+        if (!payload.workspace_id || payload.workspace_id === workspaceId) {
+          loadInbox();
+        }
       }
     } catch (e) {
       console.error(e);
@@ -178,6 +182,7 @@ async function loadWorkspaceData(renderChat = true) {
     renderSuggestions(data.pm_suggestions || []);
     renderDecisions(data.managerial_decisions || []);
     renderSkills(data.skills || []);
+    loadInbox();
 
     if (renderChat && data.messages && data.messages.length > 0) {
       renderChatHistory(data.messages);
@@ -593,6 +598,20 @@ async function saveSkillPrompt() {
 }
 
 // 11. Chat Handlers
+function renderMarkdown(rawText) {
+  if (!rawText) return '';
+  if (window.marked && window.DOMPurify) {
+    try {
+      marked.setOptions({ breaks: true, gfm: true });
+      const rawHtml = marked.parse(rawText);
+      return DOMPurify.sanitize(rawHtml);
+    } catch (e) {
+      console.warn('Markdown parse error, falling back:', e);
+    }
+  }
+  return `<p class="whitespace-pre-line">${escapeHtml(rawText)}</p>`;
+}
+
 function renderChatHistory(messages) {
   chatMessagesEl.innerHTML = '';
   messages.forEach(m => {
@@ -608,7 +627,7 @@ function appendUserMessage(text, scroll = true) {
   div.className = 'flex items-start justify-end space-x-2';
   div.innerHTML = `
     <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-xs p-3 max-w-[85%] shadow-xs leading-relaxed text-xs">
-      <p>${escapeHtml(text)}</p>
+      <p class="whitespace-pre-line">${escapeHtml(text)}</p>
     </div>
   `;
   chatMessagesEl.appendChild(div);
@@ -625,12 +644,14 @@ function appendAssistantMessage(text, scroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-2';
   
+  const contentHtml = renderMarkdown(cleanText);
+
   div.innerHTML = `
-    <div class="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 text-[11px]">
+    <div class="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 text-[11px] mt-0.5">
       H
     </div>
-    <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl rounded-tl-xs p-3 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-xs leading-relaxed chat-body text-xs">
-      <p class="whitespace-pre-line">${escapeHtml(cleanText)}</p>
+    <div class="bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl rounded-tl-xs p-3 max-w-[88%] text-slate-800 dark:text-slate-200 shadow-xs leading-relaxed chat-body text-xs space-y-1.5 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:font-bold [&_strong]:text-indigo-950 dark:[&_strong]:text-indigo-200 [&_code]:bg-slate-200 dark:[&_code]:bg-slate-700 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono">
+      ${contentHtml}
     </div>
   `;
   chatMessagesEl.appendChild(div);
@@ -640,9 +661,10 @@ function appendAssistantMessage(text, scroll = true) {
 function appendSystemMessage(text, scroll = true) {
   const div = document.createElement('div');
   div.className = 'flex justify-center my-1.5';
+  const contentHtml = renderMarkdown(text);
   div.innerHTML = `
-    <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-xs px-3 py-1.5 rounded-xl max-w-[92%] text-center">
-      <p class="whitespace-pre-line">${escapeHtml(text)}</p>
+    <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-xs px-3 py-1.5 rounded-xl max-w-[92%] text-center [&_strong]:font-bold">
+      ${contentHtml}
     </div>
   `;
   chatMessagesEl.appendChild(div);
@@ -790,9 +812,284 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// 13. TIME CONTROLS (SIMULATION SPEED)
+let instructorPin = sessionStorage.getItem('colima_instructor_pin') || '';
+let pendingSpeedAction = null;
+
+function getOrPromptPin(actionCallback) {
+  if (instructorPin) {
+    actionCallback(instructorPin);
+    return;
+  }
+  pendingSpeedAction = actionCallback;
+  const modal = document.getElementById('pin-prompt-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    const input = document.getElementById('pin-prompt-input');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  } else {
+    const entered = prompt('Ingresa el PIN del instructor/taller:');
+    if (entered) {
+      instructorPin = entered.trim();
+      sessionStorage.setItem('colima_instructor_pin', instructorPin);
+      actionCallback(instructorPin);
+    }
+  }
+}
+
+function closePinModal() {
+  const modal = document.getElementById('pin-prompt-modal');
+  if (modal) modal.classList.add('hidden');
+  pendingSpeedAction = null;
+}
+
+function savePinPrompt() {
+  const input = document.getElementById('pin-prompt-input');
+  const pinVal = input ? input.value.trim() : '';
+  if (!pinVal) return;
+  instructorPin = pinVal;
+  sessionStorage.setItem('colima_instructor_pin', pinVal);
+  closePinModal();
+  if (pendingSpeedAction) {
+    pendingSpeedAction(pinVal);
+    pendingSpeedAction = null;
+  }
+}
+
+async function setSimSpeed(speedMultiplier) {
+  getOrPromptPin(async (pin) => {
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/time/speed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speed_multiplier: speedMultiplier, instructor_pin: pin })
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem('colima_instructor_pin');
+        instructorPin = '';
+        alert('PIN incorrecto. Por favor verifícalo con el instructor.');
+        return;
+      }
+      const data = await res.json();
+      if (data.state) renderClockState(data.state);
+    } catch (e) {
+      console.error('Error setting speed:', e);
+    }
+  });
+}
+
+async function stepSimDay() {
+  getOrPromptPin(async (pin) => {
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/time/step-day`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pin })
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem('colima_instructor_pin');
+        instructorPin = '';
+        alert('PIN incorrecto. Por favor verifícalo con el instructor.');
+        return;
+      }
+      const data = await res.json();
+      if (data.state) renderClockState(data.state);
+      loadWorkspaceData();
+    } catch (e) {
+      console.error('Error stepping day:', e);
+    }
+  });
+}
+
+// 14. WORKSPACE RESET
+const resetModal = document.getElementById('reset-modal');
+const btnResetWorkspace = document.getElementById('btn-reset-workspace');
+
+if (btnResetWorkspace) {
+  btnResetWorkspace.addEventListener('click', () => {
+    if (resetModal) resetModal.classList.remove('hidden');
+  });
+}
+
+function closeResetModal() {
+  if (resetModal) resetModal.classList.add('hidden');
+}
+
+async function confirmResetWorkspace() {
+  try {
+    const res = await fetch(`/api/workspaces/${workspaceId}/reset`, {
+      method: 'POST'
+    });
+    if (res.ok) {
+      closeResetModal();
+      chatMessagesEl.innerHTML = '';
+      appendAssistantMessage('¡Hola! Soy Hermes, tu PM asistente. El workspace ha sido reiniciado por completo. ¿Qué proyecto deseas aperturar o por dónde comenzamos?', false);
+      loadWorkspaceData();
+      loadInbox();
+      appendSystemMessage('🔄 **Workspace reiniciado con éxito.** Todos los datos han vuelto a su estado inicial.');
+    } else {
+      alert('Error al reiniciar el workspace');
+    }
+  } catch (e) {
+    alert('Error de conexión al reiniciar: ' + e.message);
+  }
+}
+
+// 15. SUGERENCIAS & INBOX SUB-TABS
+function switchSugTab(tabId) {
+  const tabPm = document.getElementById('sug-tab-pm');
+  const tabInbox = document.getElementById('sug-tab-inbox');
+  const panelPm = document.getElementById('sug-panel-pm');
+  const panelInbox = document.getElementById('sug-panel-inbox');
+
+  if (tabId === 'sug-pm') {
+    if (tabPm) {
+      tabPm.className = 'sug-tab active text-xs font-semibold px-3 py-1.5 rounded-t-lg border border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5';
+    }
+    if (tabInbox) {
+      tabInbox.className = 'sug-tab text-xs font-medium px-3 py-1.5 rounded-t-lg border border-b-0 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white flex items-center gap-1.5 transition';
+    }
+    if (panelPm) panelPm.classList.remove('hidden');
+    if (panelInbox) panelInbox.classList.add('hidden');
+  } else if (tabId === 'sug-inbox') {
+    if (tabInbox) {
+      tabInbox.className = 'sug-tab active text-xs font-semibold px-3 py-1.5 rounded-t-lg border border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5';
+    }
+    if (tabPm) {
+      tabPm.className = 'sug-tab text-xs font-medium px-3 py-1.5 rounded-t-lg border border-b-0 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white flex items-center gap-1.5 transition';
+    }
+    if (panelPm) panelPm.classList.add('hidden');
+    if (panelInbox) panelInbox.classList.remove('hidden');
+    loadInbox();
+  }
+}
+
+// 16. INBOX HERMES (AUTONOMOUS MESSAGES)
+async function loadInbox() {
+  try {
+    const res = await fetch(`/api/workspaces/${workspaceId}/inbox`);
+    if (!res.ok) return;
+    const data = await res.json();
+    renderInbox(data.messages || [], data.unread_count || 0);
+  } catch (e) {
+    console.error('[Inbox Error]', e);
+  }
+}
+
+function renderInbox(messages, unreadCount) {
+  const container = document.getElementById('inbox-container');
+  const badgeTop = document.getElementById('inbox-unread-badge');
+  const badgeSub = document.getElementById('inbox-badge-sub');
+
+  if (unreadCount > 0) {
+    if (badgeTop) {
+      badgeTop.textContent = unreadCount;
+      badgeTop.classList.remove('hidden');
+    }
+    if (badgeSub) {
+      badgeSub.textContent = unreadCount;
+      badgeSub.classList.remove('hidden');
+    }
+  } else {
+    if (badgeTop) badgeTop.classList.add('hidden');
+    if (badgeSub) badgeSub.classList.add('hidden');
+  }
+
+  if (!container) return;
+
+  if (messages.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-10 text-slate-400 dark:text-slate-500 text-xs">
+        <i class="fa-solid fa-robot text-2xl mb-2 opacity-30"></i>
+        <p>Hermes analiza el estado del workspace periódicamente.<br>Los avisos e insights autónomos aparecerán aquí.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+  messages.forEach(msg => {
+    const card = document.createElement('div');
+    const isUnread = !msg.read;
+    
+    let icon = 'fa-lightbulb text-amber-500';
+    let bgClass = isUnread ? 'bg-indigo-50/50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800' : 'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800';
+    
+    if (msg.type === 'alerta') {
+      icon = 'fa-triangle-exclamation text-rose-500';
+      if (isUnread) bgClass = 'bg-rose-50/50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60';
+    } else if (msg.type === 'insight') {
+      icon = 'fa-chart-line text-blue-500';
+    } else if (msg.type === 'acción') {
+      icon = 'fa-bolt text-indigo-500';
+    }
+
+    const bodyHtml = renderMarkdown(msg.body);
+
+    card.className = `${bgClass} border rounded-2xl p-4 shadow-xs space-y-2.5 transition`;
+    card.innerHTML = `
+      <div class="flex items-start justify-between">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid ${icon} text-sm"></i>
+          <h4 class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(msg.title)}</h4>
+          ${isUnread ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-600 text-white">Nuevo</span>' : ''}
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-[10px] text-slate-400 font-mono">${escapeHtml(msg.sim_time || '')}</span>
+          ${isUnread ? `<button onclick="markInboxMessageRead('${msg.id}')" title="Marcar como leída" class="text-slate-400 hover:text-indigo-600 text-xs px-1 py-0.5 rounded transition"><i class="fa-solid fa-check"></i></button>` : ''}
+        </div>
+      </div>
+      <div class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed space-y-1 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-4">
+        ${bodyHtml}
+      </div>
+      <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <button onclick="discussInboxInChat('${escapeHtml(msg.title).replace(/'/g, "\\'")}')" class="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-1">
+          <i class="fa-solid fa-comments"></i> Conversar con Hermes sobre esto
+        </button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+async function markInboxMessageRead(msgId) {
+  try {
+    await fetch(`/api/workspaces/${workspaceId}/inbox/mark-read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg_id: msgId })
+    });
+    loadInbox();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function markAllInboxRead() {
+  try {
+    await fetch(`/api/workspaces/${workspaceId}/inbox/mark-read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    loadInbox();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function discussInboxInChat(title) {
+  chatInput.value = `Respecto al aviso de "${title}": ¿Qué me recomiendas hacer o qué acciones debemos tomar?`;
+  chatForm.dispatchEvent(new Event('submit'));
+}
+
 // Start
 initTheme();
 updateApiKeyUI();
 setupSSE();
 loadWorkspaceData();
 setupEventListeners();
+
