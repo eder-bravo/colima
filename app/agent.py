@@ -527,12 +527,13 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     if not resolved_key or len(resolved_key) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Models: gemini-3.5-flash-lite (fastest, ultra-low latency & PM-tuned) > gemini-2.5-flash > gemini-3.5-flash
+    # Ultra-reliable low-latency models
     CANDIDATE_MODELS = [
+        "gemini-2.5-flash-lite",
+        "gemini-3.1-flash-lite",
         "gemini-3.5-flash-lite",
+        "gemini-flash-latest",
         "gemini-2.5-flash",
-        "gemini-3.5-flash",
-        "gemini-2.0-flash",
         "gemma-4-26b-a4b-it"
     ]
     headers = {
@@ -1124,22 +1125,27 @@ Contexto: {finding['context']}
 El mensaje debe ser directo, accionable y profesional. No uses asteriscos ni markdown."""
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-                headers={"X-Goog-Api-Key": api_key, "Content-Type": "application/json"},
-                json={
-                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 150}
-                }
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    text = "".join(p.get("text", "") for p in parts).strip()
-                    return text or finding["context"]
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for model_name in ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-latest"]:
+                try:
+                    resp = await client.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+                        headers={"X-Goog-Api-Key": api_key, "Content-Type": "application/json"},
+                        json={
+                            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 150}
+                        }
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            text = "".join(p.get("text", "") for p in parts).strip()
+                            if text:
+                                return text
+                except Exception:
+                    continue
     except Exception as e:
         print(f"[AUTONOMOUS] LLM call failed: {e}")
 
