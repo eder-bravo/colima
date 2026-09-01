@@ -49,23 +49,32 @@
 
       <!-- Time control buttons -->
       <div class="flex items-center space-x-0.5">
-        <button id="btn-time-pause" title="Pausar simulación" onclick="setSimSpeed(0)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-white transition">
+        <button id="btn-time-pause" title="Pausar simulación (0x)" onclick="setSimSpeed(0)" class="time-ctrl-btn text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition">
           <i class="fa-solid fa-pause"></i>
         </button>
-        <button id="btn-time-1x" title="Velocidad real (1x)" onclick="setSimSpeed(1)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-white transition">
+        <button id="btn-time-dec" title="Disminuir velocidad (-)" onclick="adjustSimSpeed(-1)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition">
+          <i class="fa-solid fa-minus"></i>
+        </button>
+        <button id="btn-time-inc" title="Aumentar velocidad (+)" onclick="adjustSimSpeed(1)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+        <button id="btn-time-1x" title="Velocidad normal (1x)" onclick="setSimSpeed(1)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition">
           <span class="font-bold">1x</span>
         </button>
-        <button id="btn-time-10x" title="Acelerado (10x)" onclick="setSimSpeed(10)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-white transition">
+        <button id="btn-time-10x" title="Acelerado (10x)" onclick="setSimSpeed(10)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition">
           <span class="font-bold">10x</span>
         </button>
-        <button id="btn-time-step" title="Avanzar 1 día simulado" onclick="stepSimDay()" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-white transition">
-          <i class="fa-solid fa-forward-step"></i><span class="ml-0.5">+1d</span>
+        <button id="btn-time-60x" title="Rápido (60x — 1 min sim / seg)" onclick="setSimSpeed(60)" class="time-ctrl-btn text-[10px] px-1.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition">
+          <span class="font-bold">60x</span>
+        </button>
+        <button id="btn-time-step" title="Avanzar 1 día simulado (+8h trabajo)" onclick="stepSimDay()" class="time-ctrl-btn text-[10px] px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
+          <i class="fa-solid fa-forward-step"></i><span class="ml-0.5 font-bold">+1d</span>
         </button>
       </div>
 
       <!-- Reset workspace button -->
-      <button id="btn-reset-workspace" title="Reiniciar todo el workspace" class="text-[10px] px-1.5 py-1 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/50 transition flex items-center gap-1">
-        <i class="fa-solid fa-rotate-left"></i><span class="hidden sm:inline font-medium">Reset</span>
+      <button id="btn-reset-workspace" title="Reiniciar todo el workspace" class="text-[10px] px-2 py-1 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/50 transition flex items-center gap-1 font-semibold">
+        <i class="fa-solid fa-rotate-left"></i><span>Reset</span>
       </button>
     </div>
 
@@ -213,32 +222,52 @@
           </p>
         </div>
 
-        <div id="workers-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-      </div>
-
-      <!-- 2. MIS PROYECTOS & KANBAN -->
+        <div id="workers-list" class="grid grid-cols-1 md:      <!-- 2. MIS PROYECTOS & KANBAN / GANTT -->
       <div id="stage-projects" class="stage-view flex-1 flex flex-col overflow-hidden">
         
-        <!-- Active Project Banner -->
-        <div id="project-banner" class="px-4 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <!-- Empty Project State -->
+        <div id="project-empty-state" class="p-8 max-w-lg mx-auto my-auto text-center space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm hidden">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl mx-auto shadow-xs">
+            <i class="fa-solid fa-folder-plus"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm text-slate-900 dark:text-white">No hay proyecto activo</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              El workspace está listo para comenzar. Habla con Hermes en el chat para definir el alcance, stack tecnológico y generar el backlog inicial.
+            </p>
+          </div>
+          <button onclick="promptNewProjectInChat()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 mx-auto">
+            <i class="fa-solid fa-lightbulb"></i> Definir Proyecto con Hermes
+          </button>
+        </div>
+
+        <!-- Active Project Banner & View Switcher -->
+        <div id="project-banner" class="px-4 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-bold">
               <i class="fa-solid fa-cube"></i>
             </div>
             <div>
               <h3 id="project-title-display" class="font-bold text-xs text-slate-900 dark:text-white">Fintech Micro-Lending MVP</h3>
-              <p id="project-stack-display" class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Stack: FastAPI, React, PostgreSQL, Docker • Meta: 30 días</p>
+              <p id="project-stack-display" class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Stack: FastAPI, React, PostgreSQL • Meta: 30 días</p>
             </div>
           </div>
+          
+          <!-- Kanban vs Gantt View Toggle -->
           <div class="flex items-center space-x-2">
-            <span class="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full font-semibold">
-              ● En Desarrollo
-            </span>
+            <div class="bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg flex items-center text-xs">
+              <button id="btn-view-kanban" onclick="switchProjectView('kanban')" class="px-2.5 py-1 rounded-md font-semibold text-[11px] bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs transition flex items-center gap-1">
+                <i class="fa-solid fa-table-columns"></i> Kanban
+              </button>
+              <button id="btn-view-gantt" onclick="switchProjectView('gantt')" class="px-2.5 py-1 rounded-md font-medium text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-chart-gantt"></i> Gantt / Cronograma
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Kanban Board -->
-        <div class="flex-1 p-3.5 overflow-x-auto grid grid-cols-4 gap-3.5">
+        <!-- 2A. KANBAN VIEW -->
+        <div id="kanban-view" class="flex-1 p-3.5 overflow-x-auto grid grid-cols-4 gap-3.5">
           <!-- Backlog -->
           <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
             <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
@@ -283,19 +312,57 @@
             <div id="col-done" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
           </div>
         </div>
+
+        <!-- 2B. GANTT TIMELINE VIEW -->
+        <div id="gantt-view" class="flex-1 p-4 overflow-y-auto hidden space-y-3">
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-chart-gantt text-indigo-500"></i>
+              <h4 class="font-bold text-xs text-slate-900 dark:text-white">Cronograma y Curva de Avance del Sprint (30 Días)</h4>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-slate-500">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-blue-500"></span> En Progreso</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-500"></span> Completado</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-slate-300 dark:bg-slate-700"></span> Backlog</span>
+            </div>
+          </div>
+          <div id="gantt-chart-container" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs overflow-x-auto"></div>
+        </div>
+
       </div>
 
-      <!-- 3. MI CALENDARIO -->
-      <div id="stage-calendar" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-4">
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
-          <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-            <i class="fa-solid fa-calendar-days text-indigo-500"></i> Ceremonias & Cronograma del Sprint
-          </h3>
-          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Reuniones convocadas automáticamente por Hermes según el avance e hitos del proyecto.
-          </p>
+      <!-- 3. MI CALENDARIO & CEREMONIAS -->
+      <div id="stage-calendar" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-5xl mx-auto w-full space-y-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-days text-indigo-500"></i> Calendario Visual de Ceremonias & Sincronización
+            </h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Hermes convoca y mueve automáticamente las reuniones ágiles según los hitos y bloqueos alcanzados.
+            </p>
+          </div>
+          <button onclick="scheduleMeetingWithHermes()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-calendar-plus"></i> Agendar Ceremonia
+          </button>
         </div>
-        <div id="calendar-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+        <!-- Monthly Visual Grid -->
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <h4 class="font-bold text-xs text-slate-800 dark:text-slate-200">Sprint 1 — Mes de Lanzamiento</h4>
+            <span id="cal-current-day-label" class="text-[11px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md">Día Actual: Día 1</span>
+          </div>
+          <div id="calendar-month-grid" class="grid grid-cols-7 gap-1.5 text-center text-xs"></div>
+        </div>
+
+        <!-- Upcoming Ceremonies List -->
+        <div class="space-y-2.5">
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-list-check text-indigo-500"></i> Próximas Ceremonias Agendadas
+          </h4>
+          <div id="calendar-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+        </div>
       </div>
 
       <!-- 4. SUGERENCIAS + INBOX DE HERMES -->
@@ -359,16 +426,20 @@
 
       </div>
 
-
       <!-- 5. HABILIDADES (SKILLS HUB) -->
       <div id="stage-skills" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-3.5">
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
-          <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-            <i class="fa-solid fa-brain text-indigo-500"></i> Habilidades Configurables de Hermes
-          </h3>
-          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Activa, desactiva o edita las directrices de comportamiento que Hermes combina en su loop agéntico.
-          </p>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <i class="fa-solid fa-brain text-indigo-500"></i> Habilidades Configurables de Hermes
+            </h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Enciende o apaga directrices para probar cómo cambia el comportamiento de Hermes en vivo durante el taller.
+            </p>
+          </div>
+          <button onclick="openNewSkillModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-plus"></i> Añadir Habilidad
+          </button>
         </div>
         <div id="skills-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
       </div>
@@ -376,6 +447,48 @@
     </section>
 
   </main>
+
+  <!-- NEW SKILL MODAL -->
+  <div id="new-skill-modal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-xl space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+        <h3 class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-plus text-indigo-500"></i> Añadir Nueva Habilidad a Hermes
+        </h3>
+        <button onclick="closeNewSkillModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2.5">
+        <div>
+          <label class="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Nombre de la Habilidad</label>
+          <input type="text" id="new-skill-name" placeholder="ej. Gestión de Deuda Técnica" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500 mt-1" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Ícono FontAwesome (opcional)</label>
+          <input type="text" id="new-skill-icon" placeholder="fa-code-branch" value="fa-brain" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white font-mono outline-none focus:border-indigo-500 mt-1" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Descripción Corta</label>
+          <input type="text" id="new-skill-desc" placeholder="Monitorea refactorizaciones y deuda acumulada en el sprint" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500 mt-1" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Instrucciones de Prompt para el Agente</label>
+          <textarea id="new-skill-prompt" rows="3" placeholder="Directrices específicas que Hermes debe incorporar en su razonamiento..." class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white font-mono outline-none focus:border-indigo-500 mt-1"></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeNewSkillModal()" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-xl text-xs transition">
+          Cancelar
+        </button>
+        <button onclick="saveNewSkill()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition flex items-center gap-1">
+          <i class="fa-solid fa-save"></i> Crear Habilidad
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODALS -->
   <div id="skill-modal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">

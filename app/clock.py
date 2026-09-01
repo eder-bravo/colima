@@ -59,6 +59,25 @@ class SimulationEngine:
             SET current_sim_time = ?, last_real_timestamp = ?
             WHERE id = 1;
             """, (new_dt.isoformat(), time.time()))
+
+            # Advance in_progress tasks by 8h per simulated day
+            sim_work_hours = 8.0 * days
+            in_progress_tasks = conn.execute("""
+                SELECT t.id, t.estimated_hours, t.completed_hours, p.productivity_factor
+                FROM tasks t
+                LEFT JOIN talent_profiles p ON t.assignee_id = p.id
+                WHERE t.status = 'in_progress' AND (t.blocker_reason IS NULL OR t.blocker_reason = '');
+            """).fetchall()
+
+            for task in in_progress_tasks:
+                factor = task["productivity_factor"] if task["productivity_factor"] else 1.0
+                delta = sim_work_hours * factor
+                new_comp = min(task["estimated_hours"], task["completed_hours"] + delta)
+                new_status = "done" if new_comp >= task["estimated_hours"] else ("review" if new_comp >= task["estimated_hours"] * 0.85 else "in_progress")
+                conn.execute("""
+                    UPDATE tasks SET completed_hours = ?, status = ?, updated_at = ? WHERE id = ?;
+                """, (round(new_comp, 1), new_status, datetime.utcnow().isoformat(), task["id"]))
+
             conn.commit()
         conn.close()
         state = self.get_state()
@@ -149,7 +168,7 @@ class SimulationEngine:
                     continue
 
                 speed = row["speed_multiplier"]
-                # 1 real second = (speed * 60) simulated seconds (e.g. speed=1 -> 1 min sim/sec; speed=5 -> 5 min sim/sec; speed=30 -> 30 min sim/sec)
+                # 1 real second = (speed * 60) simulated seconds
                 sim_delta_seconds = speed * 60
                 curr_dt = datetime.fromisoformat(row["current_sim_time"])
                 next_dt = curr_dt + timedelta(seconds=sim_delta_seconds)
@@ -160,23 +179,20 @@ class SimulationEngine:
                 WHERE id = 1;
                 """, (next_dt.isoformat(), time.time()))
 
-                # Advance task progress if within working hours (09:00 - 18:00) on weekdays (0-4)
-                if next_dt.weekday() < 5 and 9 <= next_dt.hour < 18:
-                    sim_hours_worked = sim_delta_seconds / 3600.0
-                    
-                    # Fetch all in_progress tasks
+                # Continuous task progress simulation (working hours factor: ~1/3 of day is worked)
+                sim_hours_worked = (sim_delta_seconds / 3600.0) * 0.33
+                if sim_hours_worked > 0:
                     in_progress_tasks = conn.execute("""
-                        SELECT t.id, t.workspace_id, t.estimated_hours, t.completed_hours, t.assignee_id,
-                               p.productivity_factor, p.seniority, p.availability_status
+                        SELECT t.id, t.estimated_hours, t.completed_hours, p.productivity_factor
                         FROM tasks t
                         LEFT JOIN talent_profiles p ON t.assignee_id = p.id
-                        WHERE t.status = 'in_progress' AND (p.availability_status IS NULL OR p.availability_status != 'sick');
+                        WHERE t.status = 'in_progress' AND (t.blocker_reason IS NULL OR t.blocker_reason = '');
                     """).fetchall()
 
                     for task in in_progress_tasks:
                         factor = task["productivity_factor"] if task["productivity_factor"] else 1.0
                         delta_comp = sim_hours_worked * factor
-                        new_comp = min(task["estimated_hours"] * 1.05, task["completed_hours"] + delta_comp)
+                        new_comp = min(task["estimated_hours"], task["completed_hours"] + delta_comp)
                         
                         new_status = "in_progress"
                         if new_comp >= task["estimated_hours"]:
@@ -187,12 +203,8 @@ class SimulationEngine:
                         conn.execute("""
                         UPDATE tasks
                         SET completed_hours = ?, status = ?, updated_at = ?
-                        WHERE id = 1;
-                        """ if False else """
-                        UPDATE tasks
-                        SET completed_hours = ?, status = ?, updated_at = ?
                         WHERE id = ?;
-                        """, (new_comp, new_status, datetime.utcnow().isoformat(), task["id"]))
+                        """, (round(new_comp, 1), new_status, datetime.utcnow().isoformat(), task["id"]))
 
                 conn.commit()
                 conn.close()

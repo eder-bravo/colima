@@ -152,12 +152,34 @@ function setupSSE() {
   };
 }
 
+const SPEED_LEVELS = [0, 1, 5, 10, 30, 60, 120, 300];
+let currentSimSpeed = 0;
+
+function adjustSimSpeed(delta) {
+  let idx = SPEED_LEVELS.indexOf(currentSimSpeed);
+  if (idx === -1) {
+    // Find closest
+    idx = 0;
+    for (let i = 0; i < SPEED_LEVELS.length; i++) {
+      if (SPEED_LEVELS[i] <= currentSimSpeed) idx = i;
+    }
+  }
+  let nextIdx = Math.max(0, Math.min(SPEED_LEVELS.length - 1, idx + delta));
+  setSimSpeed(SPEED_LEVELS[nextIdx]);
+}
+
 function renderClockState(state) {
   if (!state) return;
-  simDayEl.textContent = `Día ${state.day_number || 1}`;
+  currentSimDay = state.day_number || 1;
+  currentSimSpeed = state.speed_multiplier || 0;
+
+  simDayEl.textContent = `Día ${currentSimDay}`;
   simTimeEl.textContent = state.formatted_time || '12 Sep, 09:00 AM';
 
-  const speed = state.speed_multiplier || 0;
+  const calLabel = document.getElementById('cal-current-day-label');
+  if (calLabel) calLabel.textContent = `Día Actual: Día ${currentSimDay}`;
+
+  const speed = currentSimSpeed;
   if (state.status === 'paused' || speed === 0) {
     simSpeedBadge.textContent = 'Pausado';
     simSpeedBadge.className = 'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
@@ -167,6 +189,20 @@ function renderClockState(state) {
     simSpeedBadge.className = 'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30';
     clockPulse.classList.remove('hidden');
   }
+
+  // Update Speed Buttons UI Highlight
+  const btnPause = document.getElementById('btn-time-pause');
+  const btn1x = document.getElementById('btn-time-1x');
+  const btn10x = document.getElementById('btn-time-10x');
+  const btn60x = document.getElementById('btn-time-60x');
+
+  const defaultBtnClass = 'time-ctrl-btn text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition';
+  const activeBtnClass = 'time-ctrl-btn text-[10px] px-2 py-1 rounded bg-indigo-600 text-white font-bold border border-indigo-700 shadow-xs transition';
+
+  if (btnPause) btnPause.className = (speed === 0) ? activeBtnClass : defaultBtnClass;
+  if (btn1x) btn1x.className = (speed === 1) ? activeBtnClass : defaultBtnClass;
+  if (btn10x) btn10x.className = (speed === 10) ? activeBtnClass : defaultBtnClass;
+  if (btn60x) btn60x.className = (speed === 60) ? activeBtnClass : defaultBtnClass;
 }
 
 // 4. Load Workspace Data
@@ -274,8 +310,61 @@ function renderWorkers(talent, tasks) {
   });
 }
 
-// 6. Section 2: MIS PROYECTOS & KANBAN
+// 6. Section 2: MIS PROYECTOS & KANBAN / GANTT
+let currentProjectView = 'kanban';
+let currentSimDay = 1;
+
+function switchProjectView(view) {
+  currentProjectView = view;
+  const btnKanban = document.getElementById('btn-view-kanban');
+  const btnGantt = document.getElementById('btn-view-gantt');
+  const kanbanView = document.getElementById('kanban-view');
+  const ganttView = document.getElementById('gantt-view');
+
+  if (view === 'kanban') {
+    if (btnKanban) btnKanban.className = 'px-2.5 py-1 rounded-md font-semibold text-[11px] bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs transition flex items-center gap-1';
+    if (btnGantt) btnGantt.className = 'px-2.5 py-1 rounded-md font-medium text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1';
+    if (kanbanView) kanbanView.classList.remove('hidden');
+    if (ganttView) ganttView.classList.add('hidden');
+  } else {
+    if (btnGantt) btnGantt.className = 'px-2.5 py-1 rounded-md font-semibold text-[11px] bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs transition flex items-center gap-1';
+    if (btnKanban) btnKanban.className = 'px-2.5 py-1 rounded-md font-medium text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1';
+    if (kanbanView) kanbanView.classList.add('hidden');
+    if (ganttView) ganttView.classList.remove('hidden');
+  }
+}
+
+function promptNewProjectInChat() {
+  chatInput.value = 'Hola Hermes, definamos y aperturemos el primer proyecto del taller.';
+  chatForm.dispatchEvent(new Event('submit'));
+}
+
 function renderProjects(projects, ws, tasks) {
+  const emptyState = document.getElementById('project-empty-state');
+  const banner = document.getElementById('project-banner');
+  const kanbanView = document.getElementById('kanban-view');
+  const ganttView = document.getElementById('gantt-view');
+
+  const hasProject = (projects && projects.length > 0) || Boolean(ws.project_name);
+
+  if (!hasProject) {
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (banner) banner.classList.add('hidden');
+    if (kanbanView) kanbanView.classList.add('hidden');
+    if (ganttView) ganttView.classList.add('hidden');
+    return;
+  }
+
+  if (emptyState) emptyState.classList.add('hidden');
+  if (banner) banner.classList.remove('hidden');
+  if (currentProjectView === 'kanban') {
+    if (kanbanView) kanbanView.classList.remove('hidden');
+    if (ganttView) ganttView.classList.add('hidden');
+  } else {
+    if (kanbanView) kanbanView.classList.add('hidden');
+    if (ganttView) ganttView.classList.remove('hidden');
+  }
+
   if (projects && projects.length > 0) {
     const p = projects[0];
     projectTitleDisplay.textContent = p.title;
@@ -293,14 +382,14 @@ function renderProjects(projects, ws, tasks) {
     done: document.getElementById('col-done')
   };
   const counts = { backlog: 0, in_progress: 0, review: 0, done: 0 };
-  Object.values(cols).forEach(c => c.innerHTML = '');
+  Object.values(cols).forEach(c => { if (c) c.innerHTML = ''; });
 
   tasks.forEach(task => {
     const status = task.status in cols ? task.status : 'backlog';
     counts[status]++;
 
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-3 shadow-xs hover:shadow-sm transition space-y-2.5 cursor-pointer';
+    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-3 shadow-xs hover:shadow-sm transition space-y-2.5';
 
     let priorityBadge = '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">Normal</span>';
     if (task.priority === 'urgent') {
@@ -312,32 +401,46 @@ function renderProjects(projects, ws, tasks) {
     const assigneeName = task.assignee_name || 'Sin asignar';
     const initial = assigneeName.charAt(0).toUpperCase();
 
+    const progressPct = task.estimated_hours > 0 ? Math.min(100, Math.round((task.completed_hours / task.estimated_hours) * 100)) : 0;
+
+    let blockerHtml = '';
+    if (task.blocker_reason && task.status !== 'done') {
+      blockerHtml = `
+        <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-1.5 rounded-lg text-[10px] text-rose-700 dark:text-rose-300 flex items-center gap-1">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>${escapeHtml(task.blocker_reason)}</span>
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div class="flex items-start justify-between gap-1.5">
         <h4 class="font-medium text-xs text-slate-800 dark:text-slate-100 leading-snug">${escapeHtml(task.title)}</h4>
         ${priorityBadge}
       </div>
+
+      ${blockerHtml}
       
       <div class="flex items-center justify-between text-[11px] pt-0.5">
         <div class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
           <span class="w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold">
             ${initial}
           </span>
-          <span class="text-[11px]">${escapeHtml(assigneeName)}</span>
+          <span class="text-[11px] truncate max-w-[100px]">${escapeHtml(assigneeName)}</span>
         </div>
-        <span class="font-mono text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">${task.progress_percent}%</span>
+        <span class="font-mono text-[10px] font-semibold ${progressPct >= 100 ? 'text-emerald-600' : 'text-indigo-600 dark:text-indigo-400'}">${task.completed_hours || 0}h / ${task.estimated_hours}h (${progressPct}%)</span>
       </div>
 
-      <div class="w-full h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-        <div class="h-full bg-indigo-500 rounded-full task-progress-bar" style="width: ${task.progress_percent}%"></div>
+      <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+        <div class="h-full ${progressPct >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'} rounded-full transition-all duration-300" style="width: ${progressPct}%"></div>
       </div>
     `;
 
-    cols[status].appendChild(card);
+    if (cols[status]) cols[status].appendChild(card);
   });
 
   Object.keys(cols).forEach(key => {
-    if (counts[key] === 0) {
+    if (cols[key] && counts[key] === 0) {
       cols[key].innerHTML = `
         <div class="h-20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-600">
           Sin tareas
@@ -346,16 +449,142 @@ function renderProjects(projects, ws, tasks) {
     }
   });
 
-  document.getElementById('count-backlog').textContent = counts.backlog;
-  document.getElementById('count-in_progress').textContent = counts.in_progress;
-  document.getElementById('count-review').textContent = counts.review;
-  document.getElementById('count-done').textContent = counts.done;
+  const cB = document.getElementById('count-backlog');
+  const cP = document.getElementById('count-in_progress');
+  const cR = document.getElementById('count-review');
+  const cD = document.getElementById('count-done');
+  if (cB) cB.textContent = counts.backlog;
+  if (cP) cP.textContent = counts.in_progress;
+  if (cR) cR.textContent = counts.review;
+  if (cD) cD.textContent = counts.done;
+
+  // Render Gantt Timeline View
+  renderGanttChart(tasks);
 }
 
-// 7. Section 3: MI CALENDARIO
+function renderGanttChart(tasks) {
+  const container = document.getElementById('gantt-chart-container');
+  if (!container) return;
+
+  if (!tasks || tasks.length === 0) {
+    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">No hay tareas creadas para generar el cronograma Gantt.</p>';
+    return;
+  }
+
+  let html = `
+    <div class="min-w-[680px] space-y-2">
+      <!-- Days Header Row -->
+      <div class="grid grid-cols-12 text-[10px] font-mono text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-1">
+        <div class="col-span-4 font-sans font-bold text-slate-700 dark:text-slate-300">Tarea & Asignado</div>
+        <div class="col-span-8 grid grid-cols-6 text-center">
+          <span>D1-D5</span>
+          <span>D6-D10</span>
+          <span>D11-D15</span>
+          <span>D16-D20</span>
+          <span>D21-D25</span>
+          <span>D26-D30</span>
+        </div>
+      </div>
+  `;
+
+  tasks.forEach((task, idx) => {
+    const progressPct = task.estimated_hours > 0 ? Math.min(100, Math.round((task.completed_hours / task.estimated_hours) * 100)) : 0;
+    
+    // Calculate synthetic start day & duration based on index and estimation
+    const startDay = Math.min(25, 1 + (idx * 2));
+    const durationDays = Math.max(3, Math.min(12, Math.round(task.estimated_hours / 4)));
+    const leftPct = ((startDay - 1) / 30) * 100;
+    const widthPct = Math.min(100 - leftPct, (durationDays / 30) * 100);
+
+    let barColor = 'bg-slate-300 dark:bg-slate-700';
+    if (task.status === 'in_progress') barColor = 'bg-blue-500';
+    else if (task.status === 'review') barColor = 'bg-amber-500';
+    else if (task.status === 'done') barColor = 'bg-emerald-500';
+
+    html += `
+      <div class="grid grid-cols-12 items-center py-1.5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-lg px-1 transition text-xs">
+        <div class="col-span-4 pr-2">
+          <p class="font-semibold text-slate-800 dark:text-slate-200 truncate text-[11px]">${escapeHtml(task.title)}</p>
+          <p class="text-[10px] text-slate-400 truncate">👤 ${escapeHtml(task.assignee_name || 'Sin asignar')} • ${task.estimated_hours}h</p>
+        </div>
+        <div class="col-span-8 relative h-6 bg-slate-100 dark:bg-slate-800/60 rounded-md overflow-hidden flex items-center">
+          <div class="absolute top-1 bottom-1 ${barColor} rounded opacity-90 shadow-xs flex items-center justify-between px-2 text-[9px] text-white font-bold transition-all duration-300" style="left: ${leftPct}%; width: ${widthPct}%;">
+            <span>${progressPct}%</span>
+            <span>${task.completed_hours}h/${task.estimated_hours}h</span>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// 7. Section 3: MI CALENDARIO & CEREMONIAS VISUALES
 function renderCalendar(events) {
+  const monthGrid = document.getElementById('calendar-month-grid');
+  const calLabel = document.getElementById('cal-current-day-label');
+  if (calLabel) calLabel.textContent = `Día Actual: Día ${currentSimDay}`;
+
+  if (monthGrid) {
+    monthGrid.innerHTML = '';
+    // Days of week header
+    const daysHeader = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    daysHeader.forEach(d => {
+      const h = document.createElement('div');
+      h.className = 'font-bold text-[10px] text-slate-400 py-1 uppercase';
+      h.textContent = d;
+      monthGrid.appendChild(h);
+    });
+
+    // 30 days of sprint
+    for (let day = 1; day <= 30; day++) {
+      const cell = document.createElement('div');
+      const isCurrentDay = (day === currentSimDay);
+      const isPastDay = (day < currentSimDay);
+
+      let borderStyle = 'border border-slate-100 dark:border-slate-800';
+      let bgStyle = isPastDay ? 'bg-slate-50/50 dark:bg-slate-900/40 text-slate-400' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300';
+      if (isCurrentDay) {
+        borderStyle = 'border-2 border-indigo-500 ring-2 ring-indigo-500/20';
+        bgStyle = 'bg-indigo-50/70 dark:bg-indigo-950/70 font-bold text-indigo-700 dark:text-indigo-300 shadow-xs';
+      }
+
+      // Find events matching this day
+      const dayEvents = (events || []).filter(e => {
+        if (e.sim_date && (e.sim_date.includes(`Día ${day}`) || e.sim_date.includes(`Dia ${day}`))) return true;
+        if (day === 1 && e.title.toLowerCase().includes('kickoff')) return true;
+        if (day === 15 && e.title.toLowerCase().includes('checkpoint')) return true;
+        if (day === 30 && (e.title.toLowerCase().includes('demo') || e.title.toLowerCase().includes('retro'))) return true;
+        return false;
+      });
+
+      let chips = '';
+      dayEvents.forEach(ev => {
+        let chipBg = 'bg-indigo-500 text-white';
+        if (ev.title.toLowerCase().includes('desbloqueo')) chipBg = 'bg-rose-500 text-white';
+        else if (ev.title.toLowerCase().includes('daily')) chipBg = 'bg-emerald-500 text-white';
+        else if (ev.title.toLowerCase().includes('checkpoint')) chipBg = 'bg-amber-500 text-white';
+
+        chips += `<span class="block truncate text-[8px] px-1 py-0.5 rounded ${chipBg} font-medium mt-0.5" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</span>`;
+      });
+
+      cell.className = `${borderStyle} ${bgStyle} rounded-xl p-1 h-14 flex flex-col justify-between transition`;
+      cell.innerHTML = `
+        <div class="flex items-center justify-between text-[10px]">
+          <span>D${day}</span>
+          ${isCurrentDay ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping"></span>' : ''}
+        </div>
+        <div class="overflow-hidden space-y-0.5">${chips}</div>
+      `;
+      monthGrid.appendChild(cell);
+    }
+  }
+
+  // Render Upcoming Events Cards
   calendarContainer.innerHTML = '';
-  if (events.length === 0) {
+  if (!events || events.length === 0) {
     calendarContainer.innerHTML = '<p class="col-span-2 text-slate-400 text-xs py-4 text-center">No hay reuniones ni ceremonias agendadas en el calendario aún.</p>';
     return;
   }
@@ -365,22 +594,32 @@ function renderCalendar(events) {
     card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-1.5';
     card.innerHTML = `
       <div class="flex items-center justify-between">
-        <h4 class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(evt.title)}</h4>
+        <h4 class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-check text-indigo-500"></i> ${escapeHtml(evt.title)}
+        </h4>
         <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">${escapeHtml(evt.time_slot)}</span>
       </div>
       <p class="text-[11px] text-slate-500 font-medium">📅 ${escapeHtml(evt.sim_date)} • 👥 ${escapeHtml(evt.attendees)}</p>
-      <p class="text-xs text-slate-600 dark:text-slate-300 pt-0.5">${escapeHtml(evt.agenda || '')}</p>
+      <p class="text-xs text-slate-600 dark:text-slate-300 pt-0.5 leading-relaxed">${escapeHtml(evt.agenda || '')}</p>
     `;
     calendarContainer.appendChild(card);
   });
 }
 
-// 8. Section 4: SUGERENCIAS POR PM ASISTENTE
+function scheduleMeetingWithHermes() {
+  chatInput.value = 'Hermes, agenda una reunión de sincronización con el equipo para hoy.';
+  chatForm.dispatchEvent(new Event('submit'));
+}
+
+// 8. Section 4: SUGERENCIAS DINÁMICAS Y AUTO-LIMPIANTES
 function renderSuggestions(suggestions) {
   suggestionsContainer.innerHTML = '';
-  suggestionsCountBadge.textContent = suggestions.length;
+  
+  // Show only active suggestions
+  const activeSugs = (suggestions || []).filter(s => s.status === 'active');
+  suggestionsCountBadge.textContent = activeSugs.length;
 
-  if (suggestions.length === 0) {
+  if (activeSugs.length === 0) {
     suggestionsContainer.innerHTML = `
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-400 space-y-1">
         <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-1"></i>
@@ -391,36 +630,15 @@ function renderSuggestions(suggestions) {
     return;
   }
 
-  suggestions.forEach(s => {
+  activeSugs.forEach(s => {
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-500/40 rounded-2xl p-4 shadow-xs space-y-2.5';
+    card.className = 'bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-500/40 rounded-2xl p-4 shadow-xs space-y-2.5 transition';
 
     let badge = '<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">Sugerencia PM</span>';
     if (s.category === 'risk') {
       badge = '<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">Alerta de Riesgo</span>';
     } else if (s.category === 'staffing') {
       badge = '<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">Staffing & Capacidad</span>';
-    }
-
-    let actionButton = '';
-    if (s.action_type === 'quick_load') {
-      actionButton = `
-        <button onclick="applySuggestion('${s.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-bolt"></i> Cargar 5 CVs de Prueba
-        </button>
-      `;
-    } else if (s.action_type === 'request_approval') {
-      actionButton = `
-        <button onclick="applySuggestion('${s.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-paper-plane"></i> Solicitar Aprobación a Dirección
-        </button>
-      `;
-    } else if (s.action_type === 'schedule_meeting') {
-      actionButton = `
-        <button onclick="applySuggestion('${s.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-calendar-plus"></i> Agendar Sesión de Desbloqueo
-        </button>
-      `;
     }
 
     card.innerHTML = `
@@ -436,20 +654,32 @@ function renderSuggestions(suggestions) {
         <b class="text-indigo-600 dark:text-indigo-400">Recomendación de Hermes:</b> ${escapeHtml(s.recommendation)}
       </div>
 
-      ${actionButton ? `<div class="pt-1.5 flex justify-end">${actionButton}</div>` : ''}
+      <div class="pt-1.5 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+        <button onclick="dismissSuggestion('${s.id}')" class="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold flex items-center gap-1 transition">
+          <i class="fa-solid fa-xmark"></i> Omitir Sugerencia
+        </button>
+        <button onclick="discussSuggestionInChat('${escapeHtml(s.title).replace(/'/g, "\\'")}')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-comments"></i> Discutir con Hermes
+        </button>
+      </div>
     `;
 
     suggestionsContainer.appendChild(card);
   });
 }
 
-async function applySuggestion(sugId) {
+async function dismissSuggestion(sugId) {
   try {
-    await fetch(`/api/workspaces/${workspaceId}/suggestions/${sugId}/apply`, { method: 'POST' });
-    loadWorkspaceData();
+    await fetch(`/api/workspaces/${workspaceId}/suggestions/${sugId}/dismiss`, { method: 'POST' });
+    loadWorkspaceData(false);
   } catch (err) {
-    alert('Error al aplicar sugerencia: ' + err.message);
+    console.error('Error al omitir sugerencia:', err);
   }
+}
+
+function discussSuggestionInChat(title) {
+  chatInput.value = `Respecto a la sugerencia "${title}": ¿Cómo me recomiendas actuar o qué opciones tenemos?`;
+  chatForm.dispatchEvent(new Event('submit'));
 }
 
 // 9. Render Decisions
@@ -515,7 +745,7 @@ async function respondDecision(decId, status) {
   }
 }
 
-// 10. Render Skills Hub
+// 10. Render Skills Hub & Creator
 function renderSkills(skills) {
   skillsContainer.innerHTML = '';
   let activeCount = 0;
@@ -523,21 +753,24 @@ function renderSkills(skills) {
   skills.forEach(skill => {
     if (skill.is_active) activeCount++;
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-2';
+    card.className = `bg-white dark:bg-slate-900 border ${skill.is_active ? 'border-indigo-300 dark:border-indigo-800/80' : 'border-slate-200/90 dark:border-slate-800'} rounded-2xl p-4 shadow-xs space-y-2.5 transition`;
     
     card.innerHTML = `
       <div class="flex items-start justify-between">
-        <div class="flex items-center space-x-2">
-          <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl ${skill.is_active ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'} flex items-center justify-center text-xs font-bold transition">
             <i class="fa-solid ${skill.icon || 'fa-brain'}"></i>
           </div>
           <div>
             <h4 class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(skill.name)}</h4>
+            <span class="text-[10px] ${skill.is_active ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-400'}">
+              ${skill.is_active ? '● Activa en Razonamiento' : '○ Apagada'}
+            </span>
           </div>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" ${skill.is_active ? 'checked' : ''} onchange="toggleSkill('${skill.id}', this.checked)" class="sr-only peer">
-          <div class="w-8 h-4.5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-indigo-600"></div>
+          <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
         </label>
       </div>
       <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHtml(skill.description)}</p>
@@ -546,15 +779,12 @@ function renderSkills(skills) {
         <button onclick="openSkillModal('${skill.id}', '${escapeHtml(skill.name)}', '${escapeHtml(skill.prompt_instructions)}')" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1">
           <i class="fa-solid fa-code text-[10px]"></i> Ver / Editar Prompt
         </button>
-        <span class="text-[10px] ${skill.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} font-medium">
-          ${skill.is_active ? '● Activa' : '○ Inactiva'}
-        </span>
       </div>
     `;
     skillsContainer.appendChild(card);
   });
 
-  activeSkillsCount.textContent = activeCount;
+  activeSkillsCount.textContent = `${activeCount} / ${skills.length}`;
 }
 
 async function toggleSkill(skillId, isActive) {
@@ -570,6 +800,52 @@ async function toggleSkill(skillId, isActive) {
   }
 }
 
+function openNewSkillModal() {
+  document.getElementById('new-skill-name').value = '';
+  document.getElementById('new-skill-icon').value = 'fa-brain';
+  document.getElementById('new-skill-desc').value = '';
+  document.getElementById('new-skill-prompt').value = '';
+  document.getElementById('new-skill-modal').classList.remove('hidden');
+}
+
+function closeNewSkillModal() {
+  document.getElementById('new-skill-modal').classList.add('hidden');
+}
+
+async function saveNewSkill() {
+  const name = document.getElementById('new-skill-name').value.trim();
+  const icon = document.getElementById('new-skill-icon').value.trim() || 'fa-brain';
+  const desc = document.getElementById('new-skill-desc').value.trim();
+  const prompt = document.getElementById('new-skill-prompt').value.trim();
+
+  if (!name || !desc || !prompt) {
+    alert('Por favor completa el nombre, descripción y prompt de la habilidad.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/workspaces/${workspaceId}/skills/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        icon: icon,
+        description: desc,
+        prompt_instructions: prompt
+      })
+    });
+    if (res.ok) {
+      closeNewSkillModal();
+      loadWorkspaceData(false);
+      appendSystemMessage(`🧠 **Nueva Habilidad Creada:** "${name}" añadida y activada.`);
+    } else {
+      alert('Error al crear habilidad');
+    }
+  } catch (e) {
+    alert('Error de conexión: ' + e.message);
+  }
+}
+
 function openSkillModal(skillId, name, prompt) {
   currentEditingSkillId = skillId;
   skillModalTitle.innerHTML = `<i class="fa-solid fa-brain text-indigo-500"></i> Habilidad: ${name}`;
@@ -579,6 +855,7 @@ function openSkillModal(skillId, name, prompt) {
 
 function closeSkillModal() {
   skillModal.classList.add('hidden');
+  currentEditingSkillId = null;
 }
 
 async function saveSkillPrompt() {

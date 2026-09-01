@@ -24,7 +24,7 @@ DEFAULT_SKILLS = [
         "icon": "fa-diagram-project",
         "description": "Formula preguntas de PM para definir alcance, stack y objetivos antes de aperturar un proyecto.",
         "prompt_instructions": "Cuando el usuario quiera iniciar o definir un nuevo producto, realiza 2 o 3 preguntas concisas de PM (problema a resolver, stack tecnológico preferido y fecha objetivo). Tras recibir la información, crea formalmente el proyecto y su backlog inicial.",
-        "is_active": 1
+        "is_active": 0
     },
     {
         "id": "skill-workload-capacity",
@@ -32,7 +32,7 @@ DEFAULT_SKILLS = [
         "icon": "fa-chart-pie",
         "description": "Monitorea horas asignadas, productividad y previene el agotamiento (burnout) del equipo.",
         "prompt_instructions": "Usa 'get_team_workload' para analizar la capacidad del equipo. Si un desarrollador tiene más de 30 horas acumuladas, advierte sobre la sobrecarga y sugiere reasignar tareas a miembros disponibles.",
-        "is_active": 1
+        "is_active": 0
     },
     {
         "id": "skill-staffing-ats",
@@ -40,7 +40,7 @@ DEFAULT_SKILLS = [
         "icon": "fa-users-gear",
         "description": "Analiza perfiles de candidatos en PDF/ATS y asigna tareas según seniority y stack técnico.",
         "prompt_instructions": "Evalúa constantemente las habilidades del equipo en el ATS antes de asignar tareas. Asigna tareas críticas a desarrolladores Senior y tareas de soporte a perfiles Junior.",
-        "is_active": 1
+        "is_active": 0
     },
     {
         "id": "skill-standup-metrics",
@@ -48,7 +48,7 @@ DEFAULT_SKILLS = [
         "icon": "fa-chart-line",
         "description": "Modera la sincronización diaria, detecta atrasos y calcula el avance del sprint.",
         "prompt_instructions": "En cada reporte diario, resume qué hizo cada miembro, el porcentaje de avance y emite alertas inmediatas si alguna tarea está bloqueada.",
-        "is_active": 1
+        "is_active": 0
     },
     {
         "id": "skill-calendar-meetings",
@@ -56,7 +56,7 @@ DEFAULT_SKILLS = [
         "icon": "fa-calendar-check",
         "description": "Agenda automáticamente reuniones de Sprint Planning, Checkpoint y Demos según los hitos alcanzados.",
         "prompt_instructions": "Cuando el sprint inicie o alcance hitos clave (50% de avance o incidencias mayores), usa la herramienta 'schedule_meeting' para convocar al equipo.",
-        "is_active": 1
+        "is_active": 0
     },
     {
         "id": "skill-managerial-governance",
@@ -64,7 +64,7 @@ DEFAULT_SKILLS = [
         "icon": "fa-scale-balanced",
         "description": "Escala decisiones críticas (presupuesto, contrataciones, cambios de alcance) a la dirección antes de actuar.",
         "prompt_instructions": "Ante cambios imprevistos de alcance o necesidad de contratar personal, NO tomes la decisión final solo. Usa 'request_managerial_approval' para pedir autorización al Gerente.",
-        "is_active": 1
+        "is_active": 0
     }
 ]
 
@@ -97,8 +97,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        project_name TEXT DEFAULT 'Fintech Micro-Lending MVP',
-        project_description TEXT DEFAULT 'Desarrollo de un MVP para préstamos digitales con onboarding, KYC, pasarela de pagos y backoffice.',
+        project_name TEXT DEFAULT NULL,
+        project_description TEXT DEFAULT NULL,
         custom_prompt TEXT DEFAULT '',
         created_at TEXT NOT NULL
     );
@@ -224,7 +224,7 @@ def init_db():
         icon TEXT NOT NULL,
         description TEXT NOT NULL,
         prompt_instructions TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1,
+        is_active INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         PRIMARY KEY (id, workspace_id)
     );
@@ -263,18 +263,22 @@ def init_db():
     conn.close()
 
 def compute_pm_suggestions(workspace_id: str):
+    """Dynamically recomputes suggestions and automatically deactivates stale ones."""
     conn = get_db_connection()
     talents = conn.execute("SELECT id, name, role, seniority, productivity_factor FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
     tasks = conn.execute("SELECT id, title, assignee_name, estimated_hours, completed_hours, status, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
     projects = conn.execute("SELECT id, title, target_deadline FROM projects WHERE workspace_id = ?;", (workspace_id,)).fetchall()
     
-    # Check 1: No workers present in ATS
+    # Check 1: Staffing
     if len(talents) == 0:
         s_id = f"sug-{workspace_id}-no-staff"
         conn.execute("""
         INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
-        VALUES (?, ?, 'staffing', 'Falta de Equipo (Staffing)', 'El proyecto no cuenta con desarrolladores en el ATS.', 'Carga los CVs de prueba o arrastra tus propios PDFs para que Hermes pueda asignar las tareas.', 'quick_load', '{}', 'active', ?);
+        VALUES (?, ?, 'staffing', 'Falta de Equipo (Staffing)', 'El proyecto no cuenta con desarrolladores en el ATS.', 'Carga o arrastra CVs en PDF para que Hermes pueda asignar tareas.', 'quick_load', '{}', 'active', ?);
         """, (s_id, workspace_id, datetime.utcnow().isoformat()))
+    else:
+        # Clean up stale no-staff suggestion
+        conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ? AND workspace_id = ? AND status = 'active';", (f"sug-{workspace_id}-no-staff", workspace_id))
 
     # Check 2: Worker Overload / Bottleneck
     workload = {}
@@ -282,37 +286,73 @@ def compute_pm_suggestions(workspace_id: str):
         workload[t["name"]] = 0.0
     for task in tasks:
         name = task["assignee_name"]
-        if name in workload:
-            workload[name] += task["estimated_hours"]
+        if name and name in workload:
+            workload[name] += (task["estimated_hours"] - task["completed_hours"])
             
+    active_overloads = set()
     for name, hrs in workload.items():
         if hrs > 30.0:
             s_id = f"sug-{workspace_id}-overload-{name.lower().replace(' ', '-')}"
+            active_overloads.add(s_id)
             conn.execute("""
             INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
             VALUES (?, ?, 'workload', 'Riesgo de Sobrecarga (Burnout)', ?, 'Se sugiere reasignar tareas menores a desarrolladores con disponibilidad.', 'rebalance', ?, 'active', ?);
-            """, (s_id, workspace_id, f"{name} tiene {hrs}h acumuladas asignadas (límite saludable 30h).", json.dumps({"worker": name, "hours": hrs}), datetime.utcnow().isoformat()))
+            """, (s_id, workspace_id, f"{name} tiene {hrs:.0f}h pendientes asignadas (límite saludable 30h).", json.dumps({"worker": name, "hours": hrs}), datetime.utcnow().isoformat()))
+
+    # Dismiss overloads that no longer exist
+    all_overload_sugs = conn.execute("SELECT id FROM pm_suggestions WHERE workspace_id = ? AND category = 'workload' AND status = 'active';", (workspace_id,)).fetchall()
+    for row in all_overload_sugs:
+        if row["id"] not in active_overloads:
+            conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ?;", (row["id"],))
 
     # Check 3: Blockers in tasks
+    active_blockers = set()
     for task in tasks:
-        if task["blocker_reason"]:
+        if task["blocker_reason"] and task["status"] != "done":
             s_id = f"sug-{workspace_id}-blocker-{task['id']}"
+            active_blockers.add(s_id)
             conn.execute("""
             INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
             VALUES (?, ?, 'risk', 'Bloqueo Activo en Tarea', ?, 'Convocar sesión de desbloqueo con el equipo.', 'schedule_meeting', ?, 'active', ?);
             """, (s_id, workspace_id, f"La tarea '{task['title']}' está detenida: {task['blocker_reason']}", json.dumps({"task_id": task["id"]}), datetime.utcnow().isoformat()))
 
+    all_blocker_sugs = conn.execute("SELECT id FROM pm_suggestions WHERE workspace_id = ? AND category = 'risk' AND status = 'active';", (workspace_id,)).fetchall()
+    for row in all_blocker_sugs:
+        if row["id"] not in active_blockers:
+            conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ?;", (row["id"],))
+
     # Check 4: Hiring Opportunity (No QA)
-    has_qa = any("qa" in t["role"].lower() or "tester" in t["role"].lower() for t in talents)
+    has_qa = any("qa" in t["role"].lower() or "tester" in t["role"].lower() or "qa" in t["name"].lower() for t in talents)
+    qa_sug_id = f"sug-{workspace_id}-hire-qa"
     if len(talents) > 0 and not has_qa:
-        s_id = f"sug-{workspace_id}-hire-qa"
         conn.execute("""
         INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
-        VALUES (?, ?, 'staffing', 'Oportunidad de Contratación: QA Engineer', 'El equipo no cuenta con un especialista en QA Automation para validar el MVP antes de producción.', 'Solicitar aprobación gerencial para contratar un QA Automation Senior.', 'request_approval', '{}', 'active', ?);
-        """, (s_id, workspace_id, datetime.utcnow().isoformat()))
+        VALUES (?, ?, 'staffing', 'Oportunidad de Contratación: QA Engineer', 'El equipo no cuenta con un especialista en QA Automation para validar el proyecto antes de producción.', 'Considera incorporar un perfil de QA Automation.', 'request_approval', '{}', 'active', ?);
+        """, (qa_sug_id, workspace_id, datetime.utcnow().isoformat()))
+    elif has_qa:
+        conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ? AND workspace_id = ? AND status = 'active';", (qa_sug_id, workspace_id))
 
     conn.commit()
     conn.close()
+
+def dismiss_suggestion(workspace_id: str, suggestion_id: str):
+    conn = get_db_connection()
+    conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ? AND workspace_id = ?;", (suggestion_id, workspace_id))
+    conn.commit()
+    conn.close()
+
+def create_custom_skill(workspace_id: str, name: str, icon: str, description: str, prompt_instructions: str) -> dict:
+    conn = get_db_connection()
+    skill_id = f"skill-custom-{int(time.time()*1000)}"
+    icon = icon if icon.startswith("fa-") else f"fa-{icon}"
+    now = datetime.utcnow().isoformat()
+    conn.execute("""
+    INSERT INTO skills (id, workspace_id, name, icon, description, prompt_instructions, is_active, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?);
+    """, (skill_id, workspace_id, name, icon, description, prompt_instructions, now))
+    conn.commit()
+    conn.close()
+    return {"id": skill_id, "workspace_id": workspace_id, "name": name, "icon": icon, "description": description, "prompt_instructions": prompt_instructions, "is_active": 1}
 
 def ensure_workspace(workspace_id: str, name: str = "Alumno"):
     conn = get_db_connection()
@@ -320,23 +360,17 @@ def ensure_workspace(workspace_id: str, name: str = "Alumno"):
     if not row:
         conn.execute("""
         INSERT INTO workspaces (id, name, project_name, project_description, custom_prompt, created_at)
-        VALUES (?, ?, 'Fintech Micro-Lending MVP', 'Desarrollo de un MVP para préstamos digitales con onboarding, KYC, pasarela de pagos y backoffice.', '', ?);
+        VALUES (?, ?, NULL, NULL, '', ?);
         """, (workspace_id, name, datetime.utcnow().isoformat()))
-        
-        # Default project
-        conn.execute("""
-        INSERT INTO projects (id, workspace_id, title, description, tech_stack, target_deadline, status, created_at)
-        VALUES (?, ?, 'Fintech Micro-Lending MVP', 'Plataforma de préstamos digitales inmediatos con onboarding KYC.', 'FastAPI, React, PostgreSQL, Docker', '30 días', 'active', ?);
-        """, (f"prj-{workspace_id}", workspace_id, datetime.utcnow().isoformat()))
 
-    # Ensure default skills exist
+    # Ensure default skills exist (inactive by default for workshop discovery)
     for sk in DEFAULT_SKILLS:
         s_row = conn.execute("SELECT id FROM skills WHERE id = ? AND workspace_id = ?;", (sk["id"], workspace_id)).fetchone()
         if not s_row:
             conn.execute("""
             INSERT INTO skills (id, workspace_id, name, icon, description, prompt_instructions, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-            """, (sk["id"], workspace_id, sk["name"], sk["icon"], sk["description"], sk["prompt_instructions"], sk["is_active"], datetime.utcnow().isoformat()))
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?);
+            """, (sk["id"], workspace_id, sk["name"], sk["icon"], sk["description"], sk["prompt_instructions"], 0, datetime.utcnow().isoformat()))
 
     conn.commit()
     conn.close()
@@ -347,7 +381,7 @@ def ensure_workspace_skills(workspace_id: str):
     ensure_workspace(workspace_id)
 
 def reset_workspace(workspace_id: str):
-    """Wipe all workspace data and re-initialize with defaults."""
+    """Wipe all workspace data and re-initialize cleanly with 0 projects and inactive skills."""
     conn = get_db_connection()
     conn.execute("DELETE FROM chat_messages WHERE workspace_id = ?;", (workspace_id,))
     conn.execute("DELETE FROM tasks WHERE workspace_id = ?;", (workspace_id,))
@@ -362,9 +396,10 @@ def reset_workspace(workspace_id: str):
         "UPDATE workspaces SET project_name = NULL, project_description = NULL, custom_prompt = '' WHERE id = ?;",
         (workspace_id,)
     )
+    # Reset all skills to inactive (is_active = 0)
+    conn.execute("UPDATE skills SET is_active = 0 WHERE workspace_id = ?;", (workspace_id,))
     conn.commit()
     conn.close()
-    # Re-init defaults (skills, default project)
     ensure_workspace(workspace_id)
 
 def get_inbox_messages(workspace_id: str, unread_only: bool = False) -> list:

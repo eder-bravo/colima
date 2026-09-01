@@ -13,7 +13,8 @@ from pydantic import BaseModel
 
 from app.db import (
     init_db, get_db_connection, ensure_workspace_skills,
-    reset_workspace, get_inbox_messages, push_inbox_message, mark_inbox_read
+    reset_workspace, get_inbox_messages, push_inbox_message, mark_inbox_read,
+    dismiss_suggestion, create_custom_skill
 )
 from app.clock import sim_engine
 from app.generator_assets import generate_all_samples, SAMPLES_DIR
@@ -367,6 +368,31 @@ async def toggle_skill(workspace_id: str, req: SkillToggleRequest):
     conn.commit()
     conn.close()
     return {"status": "ok", "skill_id": req.skill_id, "is_active": req.is_active}
+
+@app.post("/api/workspaces/{workspace_id}/suggestions/{suggestion_id}/dismiss")
+async def dismiss_suggestion_endpoint(workspace_id: str, suggestion_id: str):
+    ensure_workspace(workspace_id)
+    dismiss_suggestion(workspace_id, suggestion_id)
+    return {"status": "dismissed", "suggestion_id": suggestion_id}
+
+
+class SkillCreateRequest(BaseModel):
+    name: str
+    icon: str = "fa-brain"
+    description: str
+    prompt_instructions: str
+
+@app.post("/api/workspaces/{workspace_id}/skills/create")
+async def create_skill_endpoint(workspace_id: str, req: SkillCreateRequest):
+    ensure_workspace(workspace_id)
+    skill = create_custom_skill(
+        workspace_id=workspace_id,
+        name=req.name,
+        icon=req.icon,
+        description=req.description,
+        prompt_instructions=req.prompt_instructions
+    )
+    return {"status": "ok", "skill": skill}
 
 class SkillUpdateRequest(BaseModel):
     skill_id: str
