@@ -420,14 +420,6 @@ function renderProjects(projects, ws, tasks) {
   }
 
   // Render Kanban Board
-  const cols = {
-    backlog: document.getElementById('col-backlog'),
-    in_progress: document.getElementById('col-in_progress'),
-    review: document.getElementById('col-review'),
-    done: document.getElementById('col-done')
-  };
-  const counts = { backlog: 0, in_progress: 0, review: 0, done: 0 };
-  Object.values(cols).forEach(c => { if (c) c.innerHTML = ''; });
 
   tasks.forEach(task => {
     const status = task.status in cols ? task.status : 'backlog';
