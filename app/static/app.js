@@ -834,7 +834,7 @@ async function respondDecision(decId, status) {
 // 10. Render Skills Hub & Creator
 function renderSkills(skills) {
   const json = JSON.stringify(skills || []);
-  let activeCount = (skills || []).filter(s => s.is_active).length;
+  const activeCount = (skills || []).filter(s => s.is_active).length;
   if (activeSkillsCount) activeSkillsCount.textContent = `${activeCount} / ${(skills || []).length}`;
   
   if (json === lastRenderedSkillsJson) return;
@@ -843,7 +843,6 @@ function renderSkills(skills) {
   skillsContainer.innerHTML = '';
 
   skills.forEach(skill => {
-    if (skill.is_active) activeCount++;
     const card = document.createElement('div');
     card.className = `bg-white dark:bg-slate-900 border ${skill.is_active ? 'border-indigo-300 dark:border-indigo-800/80' : 'border-slate-200/90 dark:border-slate-800'} rounded-2xl p-4 shadow-xs space-y-2.5 transition`;
     

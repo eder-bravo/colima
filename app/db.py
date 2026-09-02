@@ -393,7 +393,7 @@ def ensure_workspace(workspace_id: str, name: str = "Alumno"):
         if not s_row:
             conn.execute("""
             INSERT INTO skills (id, workspace_id, name, icon, description, prompt_instructions, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """, (sk["id"], workspace_id, sk["name"], sk["icon"], sk["description"], sk["prompt_instructions"], 0, datetime.utcnow().isoformat()))
 
     conn.commit()
