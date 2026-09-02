@@ -532,13 +532,13 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
     if not resolved_key or len(resolved_key) < 10:
         return await run_smart_fallback(workspace_id, user_message, system_instruction)
 
-    # Ultra-reliable low-latency models
+    # Ultra-reliable low-latency models in user-preferred priority
     CANDIDATE_MODELS = [
-        "gemini-3.1-flash-lite",
         "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash"
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-flash-lite-latest"
     ]
     headers = {
         "Content-Type": "application/json",
