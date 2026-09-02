@@ -117,9 +117,12 @@ function applyTheme(pref) {
 }
 
 // 2. STAGE NAVIGATION (Workers, Projects, Calendar, Suggestions, Skills)
+let currentActiveStage = 'projects';
+
 function switchStage(stage) {
+  currentActiveStage = stage;
   document.querySelectorAll('.stage-tab').forEach(tab => {
-    tab.className = 'stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5';
+    tab.className = 'stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center gap-1.5 whitespace-nowrap cursor-pointer';
   });
   document.querySelectorAll('.stage-view').forEach(view => view.classList.add('hidden'));
 
@@ -127,7 +130,7 @@ function switchStage(stage) {
   const activeView = document.getElementById(`stage-${stage}`);
 
   if (activeTab && activeView) {
-    activeTab.className = 'stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs';
+    activeTab.className = 'stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs whitespace-nowrap cursor-pointer';
     activeView.classList.remove('hidden');
   }
 }
@@ -1159,6 +1162,17 @@ function setupEventListeners() {
     dropzone.classList.remove('border-indigo-500');
     if (e.dataTransfer.files.length > 0) await uploadFiles(e.dataTransfer.files);
   });
+
+  // Explicit Tab Click Listeners
+  ['workers', 'projects', 'gantt', 'calendar', 'suggestions', 'skills'].forEach(stage => {
+    const tab = document.getElementById(`tab-stage-${stage}`);
+    if (tab) {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchStage(stage);
+      });
+    }
+  });
 }
 
 async function uploadFiles(files) {
@@ -1494,3 +1508,27 @@ setupSSE();
 loadWorkspaceData();
 setupEventListeners();
 
+
+
+// Global window bindings for inline HTML onclick handlers
+window.switchStage = switchStage;
+window.switchProjectView = switchProjectView;
+window.toggleAllSkills = toggleAllSkills;
+window.toggleSkill = toggleSkill;
+window.openNewSkillModal = openNewSkillModal;
+window.closeNewSkillModal = closeNewSkillModal;
+window.saveNewSkill = saveNewSkill;
+window.openSkillModal = openSkillModal;
+window.closeSkillModal = closeSkillModal;
+window.saveSkillPrompt = saveSkillPrompt;
+window.switchSugTab = switchSugTab;
+window.dismissSuggestion = dismissSuggestion;
+window.discussSuggestionInChat = discussSuggestionInChat;
+window.respondDecision = respondDecision;
+window.markInboxMessageRead = markInboxMessageRead;
+window.markAllInboxRead = markAllInboxRead;
+window.discussInboxInChat = discussInboxInChat;
+window.closeResetModal = closeResetModal;
+window.confirmResetWorkspace = confirmResetWorkspace;
+window.promptNewProjectInChat = promptNewProjectInChat;
+window.adjustSimSpeed = adjustSimSpeed;
