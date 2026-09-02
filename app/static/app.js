@@ -853,6 +853,19 @@ function renderSkills(skills) {
   activeSkillsCount.textContent = `${activeCount} / ${skills.length}`;
 }
 
+async function toggleAllSkills(isActive) {
+  try {
+    await fetch(`/api/workspaces/${workspaceId}/skills/toggle-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: isActive })
+    });
+    loadWorkspaceData(false);
+  } catch (e) {
+    alert('Error al actualizar habilidades: ' + e.message);
+  }
+}
+
 async function toggleSkill(skillId, isActive) {
   try {
     await fetch(`/api/workspaces/${workspaceId}/skills/toggle`, {

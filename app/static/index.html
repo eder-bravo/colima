@@ -435,7 +435,7 @@
 
       <!-- 5. HABILIDADES (SKILLS HUB) -->
       <div id="stage-skills" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-4xl mx-auto w-full space-y-3.5">
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
               <i class="fa-solid fa-brain text-indigo-500"></i> Habilidades Configurables de Hermes
@@ -444,9 +444,17 @@
               Enciende o apaga directrices para probar cómo cambia el comportamiento de Hermes en vivo durante el taller.
             </p>
           </div>
-          <button onclick="openNewSkillModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
-            <i class="fa-solid fa-plus"></i> Añadir Habilidad
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleAllSkills(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-toggle-on"></i> Activar Todos
+            </button>
+            <button onclick="toggleAllSkills(false)" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-toggle-off"></i> Desactivar Todos
+            </button>
+            <button onclick="openNewSkillModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-plus"></i> Añadir Habilidad
+            </button>
+          </div>
         </div>
         <div id="skills-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
       </div>

@@ -362,6 +362,22 @@ class SkillToggleRequest(BaseModel):
     skill_id: str
     is_active: bool
 
+class SkillToggleAllRequest(BaseModel):
+    is_active: bool
+
+@app.post("/api/workspaces/{workspace_id}/skills/toggle-all")
+async def toggle_all_skills_endpoint(workspace_id: str, req: SkillToggleAllRequest):
+    ensure_workspace(workspace_id)
+    conn = get_db_connection()
+    conn.execute("""
+    UPDATE skills
+    SET is_active = ?
+    WHERE workspace_id = ?;
+    """, (1 if req.is_active else 0, workspace_id))
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "is_active": req.is_active}
+
 @app.post("/api/workspaces/{workspace_id}/skills/toggle")
 async def toggle_skill(workspace_id: str, req: SkillToggleRequest):
     ensure_workspace(workspace_id)
