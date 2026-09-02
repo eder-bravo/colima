@@ -1,3 +1,5 @@
+let currentSimDateObj = { day: 12, month: 9, monthName: 'Septiembre', year: 2030, formatted: '12 de Septiembre, 2030' };
+let lastCalendarEvents = [];
 let lastRenderedSkillsJson = '';
 let lastRenderedWorkersJson = '';
 let lastRenderedSuggestionsJson = '';
@@ -186,11 +188,27 @@ function renderClockState(state) {
   currentSimDay = state.day_number || 1;
   currentSimSpeed = state.speed_multiplier || 0;
 
+  if (state.sim_day && state.sim_month_name) {
+    currentSimDateObj = {
+      day: state.sim_day,
+      month: state.sim_month || 9,
+      monthName: state.sim_month_name,
+      year: state.sim_year || 2030,
+      formatted: state.formatted_full_date || `${state.sim_day} de ${state.sim_month_name}, ${state.sim_year || 2030}`
+    };
+  }
+
   simDayEl.textContent = `Día ${currentSimDay}`;
   simTimeEl.textContent = state.formatted_time || '12 Sep, 09:00 AM';
 
+  const calTitle = document.getElementById('calendar-month-title');
+  if (calTitle) {
+    calTitle.innerHTML = `<i class="fa-solid fa-calendar-days text-indigo-500"></i> ${currentSimDateObj.monthName} ${currentSimDateObj.year}`;
+  }
   const calLabel = document.getElementById('cal-current-day-label');
-  if (calLabel) calLabel.textContent = `Día Actual: Día ${currentSimDay}`;
+  if (calLabel) {
+    calLabel.innerHTML = `Fecha Actual: <b>${currentSimDateObj.formatted}</b>`;
+  }
 
   const speed = currentSimSpeed;
   if (state.status === 'paused' || speed === 0) {
@@ -600,60 +618,95 @@ function renderGanttChart(tasks) {
   container.innerHTML = html;
 }
 
-// 7. Section 3: MI CALENDARIO & CEREMONIAS VISUALES
+// 7. Section 3: MI CALENDARIO & CEREMONIAS VISUALES (CALENDARIO MENSUAL REAL)
 function renderCalendar(events) {
+  if (events) lastCalendarEvents = events;
+  else events = lastCalendarEvents;
+
   const monthGrid = document.getElementById('calendar-month-grid');
+  const calTitle = document.getElementById('calendar-month-title');
   const calLabel = document.getElementById('cal-current-day-label');
-  if (calLabel) calLabel.textContent = `Día Actual: Día ${currentSimDay}`;
+  
+  const currentDay = currentSimDateObj.day || 12;
+  const currentMonthName = currentSimDateObj.monthName || 'Septiembre';
+  const currentYear = currentSimDateObj.year || 2030;
+  const currentFullDate = currentSimDateObj.formatted || `${currentDay} de ${currentMonthName}, ${currentYear}`;
+
+  if (calTitle) {
+    calTitle.innerHTML = `<i class="fa-solid fa-calendar-days text-indigo-500"></i> ${currentMonthName} ${currentYear}`;
+  }
+  if (calLabel) {
+    calLabel.innerHTML = `Fecha Actual: <b>${currentFullDate}</b>`;
+  }
 
   if (monthGrid) {
     monthGrid.innerHTML = '';
-    // Days of week header
+    
+    // Days of week header (Lunes a Domingo)
     const daysHeader = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     daysHeader.forEach(d => {
       const h = document.createElement('div');
-      h.className = 'font-bold text-[10px] text-slate-400 py-1 uppercase';
+      h.className = 'font-bold text-[10px] text-slate-400 dark:text-slate-500 py-1 uppercase tracking-wider';
       h.textContent = d;
       monthGrid.appendChild(h);
     });
 
-    // 30 days of sprint
-    for (let day = 1; day <= 30; day++) {
-      const cell = document.createElement('div');
-      const isCurrentDay = (day === currentSimDay);
-      const isPastDay = (day < currentSimDay);
+    // September 2030 starts on Sunday (weekday 6 in Mon-Sun indexing)
+    const firstDayDate = new Date(currentYear, (currentSimDateObj.month || 9) - 1, 1);
+    let startDayOfWeek = firstDayDate.getDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
+    let leadingEmpty = (startDayOfWeek === 0) ? 6 : startDayOfWeek - 1;
 
-      let borderStyle = 'border border-slate-100 dark:border-slate-800';
-      let bgStyle = isPastDay ? 'bg-slate-50/50 dark:bg-slate-900/40 text-slate-400' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300';
+    // Number of days in current month (e.g. 30 for September)
+    const totalDaysInMonth = new Date(currentYear, currentSimDateObj.month || 9, 0).getDate();
+
+    // Previous month filler cells
+    for (let i = 0; i < leadingEmpty; i++) {
+      const emptyCell = document.createElement('div');
+      emptyCell.className = 'rounded-xl p-1 h-14 bg-slate-50/30 dark:bg-slate-900/20 border border-slate-100/50 dark:border-slate-800/30 text-slate-300 dark:text-slate-700 text-[10px] flex flex-col justify-start';
+      monthGrid.appendChild(emptyCell);
+    }
+
+    // Real calendar days (1 to 30)
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+      const cell = document.createElement('div');
+      const isCurrentDay = (day === currentDay);
+      const isPastDay = (day < currentDay);
+
+      let borderStyle = 'border border-slate-200/80 dark:border-slate-800';
+      let bgStyle = isPastDay ? 'bg-slate-50/60 dark:bg-slate-900/40 text-slate-400' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300';
+      
       if (isCurrentDay) {
         borderStyle = 'border-2 border-indigo-500 ring-2 ring-indigo-500/20';
-        bgStyle = 'bg-indigo-50/70 dark:bg-indigo-950/70 font-bold text-indigo-700 dark:text-indigo-300 shadow-xs';
+        bgStyle = 'bg-indigo-50/90 dark:bg-indigo-950/80 font-bold text-indigo-700 dark:text-indigo-300 shadow-xs';
       }
 
       // Find events matching this day
       const dayEvents = (events || []).filter(e => {
-        if (e.sim_date && (e.sim_date.includes(`Día ${day}`) || e.sim_date.includes(`Dia ${day}`))) return true;
-        if (day === 1 && e.title.toLowerCase().includes('kickoff')) return true;
-        if (day === 15 && e.title.toLowerCase().includes('checkpoint')) return true;
-        if (day === 30 && (e.title.toLowerCase().includes('demo') || e.title.toLowerCase().includes('retro'))) return true;
+        if (!e.title) return false;
+        const simD = (e.sim_date || '').toLowerCase();
+        if (simD.includes(`${day} sep`) || simD.includes(`${day} de sep`) || simD.includes(`-${String(day).padStart(2, '0')}`)) return true;
+        if (day === 12 && (e.title.toLowerCase().includes('kickoff') || simD.includes('día 1') || simD.includes('dia 1'))) return true;
+        if (day === 18 && (e.title.toLowerCase().includes('checkpoint') || simD.includes('día 5') || simD.includes('dia 5'))) return true;
+        if (day === 30 && (e.title.toLowerCase().includes('demo') || e.title.toLowerCase().includes('retro') || e.title.toLowerCase().includes('cierre') || simD.includes('día 30') || simD.includes('lanzamiento'))) return true;
         return false;
       });
 
       let chips = '';
       dayEvents.forEach(ev => {
-        let chipBg = 'bg-indigo-500 text-white';
-        if (ev.title.toLowerCase().includes('desbloqueo')) chipBg = 'bg-rose-500 text-white';
-        else if (ev.title.toLowerCase().includes('daily')) chipBg = 'bg-emerald-500 text-white';
-        else if (ev.title.toLowerCase().includes('checkpoint')) chipBg = 'bg-amber-500 text-white';
+        let chipBg = 'bg-indigo-600 text-white';
+        if (ev.title.toLowerCase().includes('desbloqueo') || ev.title.toLowerCase().includes('bloqueo')) chipBg = 'bg-rose-600 text-white';
+        else if (ev.title.toLowerCase().includes('daily')) chipBg = 'bg-emerald-600 text-white';
+        else if (ev.title.toLowerCase().includes('checkpoint') || ev.title.toLowerCase().includes('sincronización')) chipBg = 'bg-amber-600 text-white';
+        else if (ev.title.toLowerCase().includes('lanzamiento') || ev.title.toLowerCase().includes('demo')) chipBg = 'bg-purple-600 text-white';
 
-        chips += `<span class="block truncate text-[8px] px-1 py-0.5 rounded ${chipBg} font-medium mt-0.5" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</span>`;
+        chips += `<span class="block truncate text-[8px] px-1.5 py-0.5 rounded ${chipBg} font-medium mt-0.5 shadow-2xs" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</span>`;
       });
 
-      cell.className = `${borderStyle} ${bgStyle} rounded-xl p-1 h-14 flex flex-col justify-between transition`;
+      cell.className = `${borderStyle} ${bgStyle} rounded-xl p-1.5 h-16 flex flex-col justify-between transition text-left overflow-hidden`;
       cell.innerHTML = `
         <div class="flex items-center justify-between text-[10px]">
-          <span>D${day}</span>
-          ${isCurrentDay ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping"></span>' : ''}
+          <span class="font-bold">${day}</span>
+          ${isCurrentDay ? '<span class="text-[8px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/60 px-1 rounded">Hoy</span>' : ''}
         </div>
         <div class="overflow-hidden space-y-0.5">${chips}</div>
       `;
@@ -661,28 +714,53 @@ function renderCalendar(events) {
     }
   }
 
-  // Render Upcoming Events Cards
-  calendarContainer.innerHTML = '';
-  if (!events || events.length === 0) {
-    calendarContainer.innerHTML = '<p class="col-span-2 text-slate-400 text-xs py-4 text-center">No hay reuniones ni ceremonias agendadas en el calendario aún.</p>';
-    return;
-  }
+  // Render Upcoming Events Cards with standardized real dates
+  if (calendarContainer) {
+    calendarContainer.innerHTML = '';
+    if (!events || events.length === 0) {
+      calendarContainer.innerHTML = `
+        <div class="col-span-2 text-center py-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-slate-400 text-xs">
+          <i class="fa-solid fa-calendar-xmark text-2xl mb-1.5 text-slate-300 dark:text-slate-700"></i>
+          <p>No hay ceremonias agendadas en este momento.</p>
+        </div>
+      `;
+      return;
+    }
 
-  events.forEach(evt => {
-    const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-1.5';
-    card.innerHTML = `
-      <div class="flex items-center justify-between">
-        <h4 class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-          <i class="fa-solid fa-calendar-check text-indigo-500"></i> ${escapeHtml(evt.title)}
-        </h4>
-        <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">${escapeHtml(evt.time_slot)}</span>
-      </div>
-      <p class="text-[11px] text-slate-500 font-medium">📅 ${escapeHtml(evt.sim_date)} • 👥 ${escapeHtml(evt.attendees)}</p>
-      <p class="text-xs text-slate-600 dark:text-slate-300 pt-0.5 leading-relaxed">${escapeHtml(evt.agenda || '')}</p>
-    `;
-    calendarContainer.appendChild(card);
-  });
+    events.forEach(ev => {
+      const card = document.createElement('div');
+      card.className = 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-2.5 transition';
+      
+      let dateDisplay = escapeHtml(ev.sim_date || 'Fecha por definir');
+      if (dateDisplay.toLowerCase().includes('día 1') || dateDisplay.toLowerCase().includes('dia 1')) {
+        dateDisplay = '12 de Septiembre, 2030';
+      } else if (dateDisplay.toLowerCase().includes('día 5') || dateDisplay.toLowerCase().includes('dia 5')) {
+        dateDisplay = '18 de Septiembre, 2030';
+      } else if (dateDisplay.toLowerCase().includes('30 sep') || dateDisplay.toLowerCase().includes('lanzamiento')) {
+        dateDisplay = '30 de Septiembre, 2030';
+      }
+
+      card.innerHTML = `
+        <div class="flex items-start justify-between">
+          <div class="flex items-center space-x-2">
+            <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">
+              <i class="fa-solid fa-calendar-check"></i>
+            </div>
+            <div>
+              <h4 class="font-bold text-xs text-slate-900 dark:text-white leading-tight">${escapeHtml(ev.title)}</h4>
+              <p class="text-[10px] text-slate-400 mt-0.5">📅 ${dateDisplay} • 🕒 ${escapeHtml(ev.time_slot || '10:00 AM')}</p>
+            </div>
+          </div>
+          <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+            ${escapeHtml(ev.event_type || 'Ceremonia')}
+          </span>
+        </div>
+        ${ev.agenda ? `<p class="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl leading-relaxed">${escapeHtml(ev.agenda)}</p>` : ''}
+        ${ev.attendees ? `<p class="text-[11px] text-slate-500">👥 <b>Asistentes:</b> ${escapeHtml(ev.attendees)}</p>` : ''}
+      `;
+      calendarContainer.appendChild(card);
+    });
+  }
 }
 
 function scheduleMeetingWithHermes() {

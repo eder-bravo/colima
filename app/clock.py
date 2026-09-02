@@ -199,17 +199,43 @@ class SimulationEngine:
         row = conn.execute("SELECT * FROM global_simulation WHERE id = 1;").fetchone()
         conn.close()
         if not row:
-            return {
-                "current_sim_time": "2030-09-12T09:00:00",
-                "speed_multiplier": 0.0,
-                "status": "paused",
-                "active_events": []
-            }
+            sim_time_iso = "2030-09-12T09:00:00"
+            speed = 0.0
+            status = "paused"
+            events = []
+        else:
+            sim_time_iso = row["current_sim_time"]
+            speed = row["speed_multiplier"]
+            status = row["status"]
+            events = json.loads(row["active_events"]) if row["active_events"] else []
+        
+        sim_dt = datetime.fromisoformat(sim_time_iso)
+        base_dt = datetime(2030, 9, 12, 9, 0, 0)
+        day_num = max(1, (sim_dt.date() - base_dt.date()).days + 1)
+        
+        months_es = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        month_name = months_es[sim_dt.month - 1]
+        
+        am_pm = "AM" if sim_dt.hour < 12 else "PM"
+        hour_12 = sim_dt.hour % 12
+        if hour_12 == 0:
+            hour_12 = 12
+        formatted_time = f"{sim_dt.day} {month_name[:3]}, {hour_12:02d}:{sim_dt.minute:02d} {am_pm}"
+        formatted_full_date = f"{sim_dt.day} de {month_name}, {sim_dt.year}"
+        
         return {
-            "current_sim_time": row["current_sim_time"],
-            "speed_multiplier": row["speed_multiplier"],
-            "status": row["status"],
-            "active_events": json.loads(row["active_events"])
+            "current_sim_time": sim_time_iso,
+            "sim_date": sim_dt.strftime("%Y-%m-%d"),
+            "sim_day": sim_dt.day,
+            "sim_month": sim_dt.month,
+            "sim_month_name": month_name,
+            "sim_year": sim_dt.year,
+            "day_number": day_num,
+            "formatted_time": formatted_time,
+            "formatted_full_date": formatted_full_date,
+            "speed_multiplier": speed,
+            "status": status,
+            "active_events": events
         }
 
     def set_speed(self, speed_multiplier: float, status: Optional[str] = None) -> Dict[str, Any]:
