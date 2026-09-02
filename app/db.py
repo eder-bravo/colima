@@ -1,3 +1,4 @@
+import hashlib
 import sqlite3
 import os
 import json
@@ -106,12 +107,25 @@ def init_db():
     CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        email TEXT DEFAULT '',
+        avatar_url TEXT DEFAULT '',
         project_name TEXT DEFAULT NULL,
         project_description TEXT DEFAULT NULL,
         custom_prompt TEXT DEFAULT '',
         created_at TEXT NOT NULL
     );
     """)
+
+    # Safe migration for existing workspaces table
+    try:
+        cursor.execute("ALTER TABLE workspaces ADD COLUMN email TEXT DEFAULT '';")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE workspaces ADD COLUMN avatar_url TEXT DEFAULT '';")
+    except sqlite3.OperationalError:
+        pass
 
     # Projects
     cursor.execute("""
@@ -385,6 +399,39 @@ def create_custom_skill(workspace_id: str, name: str, icon: str, description: st
     conn.commit()
     conn.close()
     return {"id": skill_id, "workspace_id": workspace_id, "name": name, "icon": icon, "description": description, "prompt_instructions": prompt_instructions, "is_active": 1}
+
+def get_or_create_workspace_by_email(email: str, name: str = "") -> dict:
+    clean_email = email.strip().lower()
+    if not clean_email:
+        clean_email = "alumno@colima.taller"
+    
+    # Deterministic workspace ID per email (clean 10 char hash)
+    email_hash = hashlib.sha256(clean_email.encode("utf-8")).hexdigest()[:10]
+    ws_id = f"ws-{email_hash}"
+
+    display_name = name.strip() if name and name.strip() else clean_email.split("@")[0].replace(".", " ").title()
+
+    conn = get_db_connection()
+    row = conn.execute("SELECT id, name, email FROM workspaces WHERE id = ?;", (ws_id,)).fetchone()
+    if not row:
+        conn.execute("""
+        INSERT INTO workspaces (id, name, email, avatar_url, project_name, project_description, custom_prompt, created_at)
+        VALUES (?, ?, ?, '', NULL, NULL, '', ?);
+        """, (ws_id, display_name, clean_email, datetime.utcnow().isoformat()))
+        conn.commit()
+    else:
+        if name and name.strip() and row["name"] != display_name:
+            conn.execute("UPDATE workspaces SET name = ?, email = ? WHERE id = ?;", (display_name, clean_email, ws_id))
+            conn.commit()
+    conn.close()
+
+    ensure_workspace_skills(ws_id)
+
+    return {
+        "workspace_id": ws_id,
+        "name": display_name,
+        "email": clean_email
+    }
 
 def ensure_workspace(workspace_id: str, name: str = "Alumno"):
     conn = get_db_connection()

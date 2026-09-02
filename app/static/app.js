@@ -14,8 +14,13 @@ let lastRenderedCalendarJson = '';
 const STORAGE_KEYS = {
   WORKSPACE_ID: 'colima_workspace_id',
   API_KEY: 'colima_gemini_api_key',
-  THEME_PREF: 'colima_theme_pref'
+  THEME_PREF: 'colima_theme_pref',
+  USER_EMAIL: 'colima_user_email',
+  USER_NAME: 'colima_user_name'
 };
+
+let currentUserEmail = localStorage.getItem(STORAGE_KEYS.USER_EMAIL) || '';
+let currentUserName = localStorage.getItem(STORAGE_KEYS.USER_NAME) || '';
 
 let workspaceId = localStorage.getItem(STORAGE_KEYS.WORKSPACE_ID);
 if (!workspaceId) {
@@ -1617,3 +1622,114 @@ window.stepSimDay = stepSimDay;
 window.closePinModal = closePinModal;
 window.savePinPrompt = savePinPrompt;
 window.scheduleMeetingWithHermes = scheduleMeetingWithHermes;
+
+
+// ==================== User Profile / Gmail Login ====================
+function updateUserDisplay() {
+  const displayEl = document.getElementById('user-display-name');
+  if (displayEl) {
+    if (currentUserName) {
+      displayEl.textContent = currentUserName.split(' ')[0];
+      displayEl.title = `${currentUserName} (${currentUserEmail})`;
+    } else if (currentUserEmail) {
+      displayEl.textContent = currentUserEmail.split('@')[0];
+      displayEl.title = currentUserEmail;
+    } else {
+      displayEl.textContent = 'Identificarse';
+      displayEl.title = 'Haz clic para ingresar con tu correo de Gmail';
+    }
+  }
+}
+
+function openProfileModal() {
+  const emailInput = document.getElementById('profile-email-input');
+  const nameInput = document.getElementById('profile-name-input');
+  const errorEl = document.getElementById('profile-error-msg');
+  if (emailInput) emailInput.value = currentUserEmail;
+  if (nameInput) nameInput.value = currentUserName;
+  if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+  const modal = document.getElementById('profile-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeProfileModal() {
+  const modal = document.getElementById('profile-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitProfile() {
+  const emailInput = document.getElementById('profile-email-input');
+  const nameInput = document.getElementById('profile-name-input');
+  const errorEl = document.getElementById('profile-error-msg');
+  const btn = document.getElementById('btn-save-profile');
+
+  const email = (emailInput ? emailInput.value : '').trim().toLowerCase();
+  const name = (nameInput ? nameInput.value : '').trim();
+
+  if (!email || !email.includes('@') || !email.includes('.')) {
+    if (errorEl) {
+      errorEl.textContent = 'Por favor ingresa un correo electrónico válido (ej. usuario@gmail.com).';
+      errorEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  try {
+    if (btn) btn.disabled = true;
+    const res = await fetch('/api/auth/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, name: name })
+    });
+    
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.detail || 'Error al conectar perfil');
+    }
+
+    const data = await res.json();
+    workspaceId = data.workspace_id;
+    currentUserEmail = data.email;
+    currentUserName = data.name;
+
+    localStorage.setItem(STORAGE_KEYS.WORKSPACE_ID, workspaceId);
+    localStorage.setItem(STORAGE_KEYS.USER_EMAIL, currentUserEmail);
+    localStorage.setItem(STORAGE_KEYS.USER_NAME, currentUserName);
+
+    updateUserDisplay();
+    closeProfileModal();
+
+    // Reset diffing caches to force complete fresh re-render
+    lastRenderedSkillsJson = '';
+    lastRenderedWorkersJson = '';
+    lastRenderedSuggestionsJson = '';
+    lastRenderedDecisionsJson = '';
+    lastRenderedProjectsJson = '';
+    lastRenderedGanttJson = '';
+    lastRenderedCalendarJson = '';
+
+    await loadWorkspaceData(true);
+    appendSystemMessage(`👋 **Bienvenido/a ${currentUserName || currentUserEmail}:** Tu espacio de trabajo individual ha sido conectado.`);
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function quickSwitchNewAccount() {
+  const emailInput = document.getElementById('profile-email-input');
+  const nameInput = document.getElementById('profile-name-input');
+  const randomSuffix = Math.random().toString(36).substring(2, 6);
+  if (emailInput) emailInput.value = `alumno.${randomSuffix}@gmail.com`;
+  if (nameInput) nameInput.value = `Alumno ${randomSuffix.toUpperCase()}`;
+  submitProfile();
+}
+
+window.openProfileModal = openProfileModal;
+window.closeProfileModal = closeProfileModal;
+window.submitProfile = submitProfile;
+window.quickSwitchNewAccount = quickSwitchNewAccount;

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.db import (
+    get_or_create_workspace_by_email,
     init_db, get_db_connection, ensure_workspace_skills,
     reset_workspace, get_inbox_messages, push_inbox_message, mark_inbox_read,
     dismiss_suggestion, create_custom_skill
@@ -176,6 +177,24 @@ async def instructor_stats(pin: Optional[str] = None, x_instructor_pin: Optional
         "total_talent": talent_count,
         "total_hiring_requests": hiring_count,
         "clock": sim_engine.get_state()
+    }
+
+class ProfileAuthRequest(BaseModel):
+    email: str
+    name: Optional[str] = ""
+
+@app.post("/api/auth/profile")
+async def profile_auth(req: ProfileAuthRequest):
+    clean_email = req.email.strip().lower()
+    if not clean_email or "@" not in clean_email or "." not in clean_email:
+        raise HTTPException(status_code=400, detail="Por favor ingresa un correo electrónico válido (ej. usuario@gmail.com).")
+    
+    res = get_or_create_workspace_by_email(clean_email, req.name or "")
+    return {
+        "status": "ok",
+        "workspace_id": res["workspace_id"],
+        "name": res["name"],
+        "email": res["email"]
     }
 
 # ==================== Student & Workspace Endpoints ====================
