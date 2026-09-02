@@ -214,6 +214,7 @@ async function loadWorkspaceData(renderChat = true) {
 
     renderWorkers(data.talent_pool || [], data.tasks || []);
     renderProjects(data.projects || [], data.workspace || {}, data.tasks || []);
+    renderGanttChart(data.tasks || []);
     renderCalendar(data.calendar_events || []);
     renderSuggestions(data.pm_suggestions || []);
     renderDecisions(data.managerial_decisions || []);
@@ -315,23 +316,11 @@ let currentProjectView = 'kanban';
 let currentSimDay = 1;
 
 function switchProjectView(view) {
-  currentProjectView = view;
-  const btnKanban = document.getElementById('btn-view-kanban');
-  const btnGantt = document.getElementById('btn-view-gantt');
-  const kanbanView = document.getElementById('kanban-view');
-  const ganttView = document.getElementById('gantt-view');
-
-  if (view === 'kanban') {
-    if (btnKanban) btnKanban.className = 'px-2.5 py-1 rounded-md font-semibold text-[11px] bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs transition flex items-center gap-1';
-    if (btnGantt) btnGantt.className = 'px-2.5 py-1 rounded-md font-medium text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1';
-    if (kanbanView) kanbanView.classList.remove('hidden');
-    if (ganttView) ganttView.classList.add('hidden');
-  } else {
-    if (btnGantt) btnGantt.className = 'px-2.5 py-1 rounded-md font-semibold text-[11px] bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs transition flex items-center gap-1';
-    if (btnKanban) btnKanban.className = 'px-2.5 py-1 rounded-md font-medium text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1';
-    if (kanbanView) kanbanView.classList.add('hidden');
-    if (ganttView) ganttView.classList.remove('hidden');
+  if (view === 'gantt') {
+    switchStage('gantt');
+    return;
   }
+  switchStage('projects');
 }
 
 function promptNewProjectInChat() {
@@ -464,10 +453,28 @@ function renderProjects(projects, ws, tasks) {
 
 function renderGanttChart(tasks) {
   const container = document.getElementById('gantt-chart-container');
+  const ganttCountBadge = document.getElementById('gantt-count-badge');
+  if (ganttCountBadge) ganttCountBadge.textContent = (tasks || []).length;
+
   if (!container) return;
 
   if (!tasks || tasks.length === 0) {
-    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">No hay tareas creadas para generar el cronograma Gantt.</p>';
+    container.innerHTML = `
+      <div class="text-center py-12 space-y-3">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl mx-auto shadow-xs">
+          <i class="fa-solid fa-chart-gantt"></i>
+        </div>
+        <div>
+          <h4 class="font-bold text-xs text-slate-800 dark:text-slate-200">No hay tareas creadas para el cronograma</h4>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+            Habla con Hermes en el chat para definir el proyecto y generar el backlog de tareas con estimaciones de horas.
+          </p>
+        </div>
+        <button onclick="promptNewProjectInChat()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-3.5 py-1.5 rounded-xl transition shadow-xs inline-flex items-center gap-1.5">
+          <i class="fa-solid fa-lightbulb"></i> Definir Tareas con Hermes
+        </button>
+      </div>
+    `;
     return;
   }
 

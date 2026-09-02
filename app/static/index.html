@@ -180,21 +180,24 @@
     <section class="lg:col-span-8 flex flex-col bg-slate-50 dark:bg-slate-950 h-full overflow-hidden">
       
       <!-- Stage Tabs (Matching User Hierarchy) -->
-      <div class="h-11 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 px-3 flex items-center space-x-1 shrink-0">
-        <button onclick="switchStage('workers')" id="tab-stage-workers" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+      <div class="h-11 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 px-3 flex items-center space-x-1 shrink-0 overflow-x-auto">
+        <button onclick="switchStage('workers')" id="tab-stage-workers" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
           <i class="fa-solid fa-users"></i> 1. Mis Trabajadores (<span id="workers-count-badge">0</span>)
         </button>
-        <button onclick="switchStage('projects')" id="tab-stage-projects" class="stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs">
+        <button onclick="switchStage('projects')" id="tab-stage-projects" class="stage-tab font-semibold text-xs px-3 py-1.5 rounded-lg transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
           <i class="fa-solid fa-diagram-project"></i> 2. Mis Proyectos & Kanban
         </button>
-        <button onclick="switchStage('calendar')" id="tab-stage-calendar" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
-          <i class="fa-solid fa-calendar-check"></i> 3. Mi Calendario
+        <button onclick="switchStage('gantt')" id="tab-stage-gantt" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
+          <i class="fa-solid fa-chart-gantt text-indigo-500"></i> 3. Cronograma Gantt (<span id="gantt-count-badge">0</span>)
         </button>
-        <button onclick="switchStage('suggestions')" id="tab-stage-suggestions" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
-          <i class="fa-solid fa-lightbulb text-amber-500"></i> 4. Sugerencias PM (<span id="suggestions-count-badge">0</span>)
+        <button onclick="switchStage('calendar')" id="tab-stage-calendar" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
+          <i class="fa-solid fa-calendar-check"></i> 4. Mi Calendario
+        </button>
+        <button onclick="switchStage('suggestions')" id="tab-stage-suggestions" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
+          <i class="fa-solid fa-lightbulb text-amber-500"></i> 5. Sugerencias PM (<span id="suggestions-count-badge">0</span>)
           <span id="inbox-unread-badge" class="hidden ml-0.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">0</span>
         </button>
-        <button onclick="switchStage('skills')" id="tab-stage-skills" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5">
+        <button onclick="switchStage('skills')" id="tab-stage-skills" class="stage-tab font-medium text-xs px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
           <i class="fa-solid fa-brain"></i> Habilidades (<span id="active-skills-count">6</span>)
         </button>
       </div>
@@ -225,7 +228,7 @@
         <div id="workers-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
       </div>
 
-      <!-- 2. MIS PROYECTOS & KANBAN / GANTT -->
+      <!-- 2. MIS PROYECTOS & KANBAN -->
       <div id="stage-projects" class="stage-view flex-1 flex flex-col overflow-hidden">
         
         <!-- Empty Project State -->
@@ -244,7 +247,7 @@
           </button>
         </div>
 
-        <!-- Active Project Banner & View Switcher -->
+        <!-- Active Project Banner -->
         <div id="project-banner" class="px-4 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-bold">
@@ -256,20 +259,15 @@
             </div>
           </div>
           
-          <!-- Kanban vs Gantt View Toggle -->
+          <!-- View Switcher -->
           <div class="flex items-center space-x-2">
-            <div class="bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg flex items-center text-xs">
-              <button id="btn-view-kanban" onclick="switchProjectView('kanban')" class="px-2.5 py-1 rounded-md font-semibold text-[11px] bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs transition flex items-center gap-1">
-                <i class="fa-solid fa-table-columns"></i> Kanban
-              </button>
-              <button id="btn-view-gantt" onclick="switchProjectView('gantt')" class="px-2.5 py-1 rounded-md font-medium text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1">
-                <i class="fa-solid fa-chart-gantt"></i> Gantt / Cronograma
-              </button>
-            </div>
+            <button onclick="switchStage('gantt')" class="px-2.5 py-1 rounded-lg font-medium text-[11px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 shadow-xs transition flex items-center gap-1.5">
+              <i class="fa-solid fa-chart-gantt"></i> Ver Cronograma Gantt
+            </button>
           </div>
         </div>
 
-        <!-- 2A. KANBAN VIEW -->
+        <!-- Kanban View -->
         <div id="kanban-view" class="flex-1 p-3.5 overflow-x-auto grid grid-cols-4 gap-3.5">
           <!-- Backlog -->
           <div class="flex flex-col bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs overflow-hidden">
@@ -316,25 +314,31 @@
           </div>
         </div>
 
-        <!-- 2B. GANTT TIMELINE VIEW -->
-        <div id="gantt-view" class="flex-1 p-4 overflow-y-auto hidden space-y-3">
-          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <i class="fa-solid fa-chart-gantt text-indigo-500"></i>
-              <h4 class="font-bold text-xs text-slate-900 dark:text-white">Cronograma y Curva de Avance del Sprint (30 Días)</h4>
-            </div>
-            <div class="flex items-center gap-3 text-[11px] text-slate-500">
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-blue-500"></span> En Progreso</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-500"></span> Completado</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-slate-300 dark:bg-slate-700"></span> Backlog</span>
-            </div>
-          </div>
-          <div id="gantt-chart-container" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs overflow-x-auto"></div>
-        </div>
-
       </div>
 
-      <!-- 3. MI CALENDARIO & CEREMONIAS -->
+      <!-- 3. CRONOGRAMA GANTT -->
+      <div id="stage-gantt" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-5xl mx-auto w-full space-y-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <i class="fa-solid fa-chart-gantt text-indigo-500"></i> Cronograma y Curva de Avance del Sprint (30 Días)
+            </h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Visualización temporal de tareas, horas estimadas vs completadas y asignaciones por miembro del equipo.
+            </p>
+          </div>
+          <div class="flex items-center gap-3 text-[11px] text-slate-500">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-blue-500"></span> En Progreso</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-500"></span> Completado</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-500"></span> En Revisión</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-slate-300 dark:bg-slate-700"></span> Backlog</span>
+          </div>
+        </div>
+
+        <div id="gantt-chart-container" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs overflow-x-auto"></div>
+      </div>
+
+      <!-- 4. MI CALENDARIO & CEREMONIAS -->
       <div id="stage-calendar" class="stage-view flex-1 p-5 overflow-y-auto hidden max-w-5xl mx-auto w-full space-y-4">
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between">
           <div>
