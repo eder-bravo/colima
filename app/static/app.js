@@ -5,12 +5,12 @@ async function checkAuthAndInitSession() {
   try {
     const res = await fetch('/auth/me');
     if (!res.ok) {
-      window.location.href = '/login';
+      // No redirect
       return false;
     }
     const data = await res.json();
     if (!data.authenticated) {
-      window.location.href = '/login';
+      // No redirect
       return false;
     }
 
@@ -1620,11 +1620,9 @@ function discussInboxInChat(title) {
 // Start
 initTheme();
 updateApiKeyUI();
-checkAuthAndInitSession().then(() => {
-  setupSSE();
-  loadWorkspaceData();
-  setupEventListeners();
-});
+setupSSE();
+loadWorkspaceData();
+setupEventListeners();
 
 
 

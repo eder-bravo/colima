@@ -118,36 +118,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    path = request.url.path
 
-    # Public routes that never require auth
-    if path.startswith("/static") or path in [
-        "/login", "/auth/google/login", "/auth/google/callback", 
-        "/auth/logout", "/auth/me", "/healthz", "/api/simulation/stream", "/favicon.ico"
-    ]:
-        return await call_next(request)
-
-    # Check session cookie or Bearer Authorization header
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-
-    user_session = verify_session_token(token) if token else None
-
-    # If unauthenticated:
-    if not user_session:
-        # API calls -> 401 JSON with redirect hint
-        if path.startswith("/api/"):
-            return JSONResponse(status_code=401, content={"error": "unauthorized", "redirect": "/login"})
-        # Page navigation -> redirect to /login
-        return RedirectResponse(url="/login", status_code=303)
-
-    request.state.user = user_session
-    return await call_next(request)
 
 
 
