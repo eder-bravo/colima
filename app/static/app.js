@@ -1,3 +1,11 @@
+let lastRenderedSkillsJson = '';
+let lastRenderedWorkersJson = '';
+let lastRenderedSuggestionsJson = '';
+let lastRenderedDecisionsJson = '';
+let lastRenderedProjectsJson = '';
+let lastRenderedGanttJson = '';
+let lastRenderedCalendarJson = '';
+
 // Colima PM Sandbox Application Logic — v5.0
 
 const STORAGE_KEYS = {
@@ -132,7 +140,9 @@ function setupSSE() {
       const payload = JSON.parse(event.data);
       if (payload.type === 'clock_update') {
         renderClockState(payload.data);
-        loadWorkspaceData(false);
+        if (payload.data && payload.data.speed_multiplier > 0) {
+          loadWorkspaceData(false);
+        }
       } else if (payload.type === 'global_event') {
         appendSystemMessage(`🚨 **EVENTO:** ${payload.event.title}\n${payload.event.description}`);
       } else if (payload.type === 'inbox_update') {
@@ -231,8 +241,12 @@ async function loadWorkspaceData(renderChat = true) {
 
 // 5. Section 1: MIS TRABAJADORES
 function renderWorkers(talent, tasks) {
+  const json = JSON.stringify({ talent, tasks });
+  if (workersCountBadge) workersCountBadge.textContent = (talent || []).length;
+  if (json === lastRenderedWorkersJson) return;
+  lastRenderedWorkersJson = json;
+
   workersListEl.innerHTML = '';
-  workersCountBadge.textContent = talent.length;
 
   if (talent.length === 0) {
     workersListEl.innerHTML = `
@@ -516,6 +530,10 @@ function renderGanttChart(tasks) {
   if (ganttCountBadge) ganttCountBadge.textContent = (tasks || []).length;
 
   if (!container) return;
+  
+  const json = JSON.stringify(tasks || []);
+  if (json === lastRenderedGanttJson) return;
+  lastRenderedGanttJson = json;
 
   if (!tasks || tasks.length === 0) {
     container.innerHTML = `
@@ -679,11 +697,14 @@ function scheduleMeetingWithHermes() {
 
 // 8. Section 4: SUGERENCIAS DINÁMICAS Y AUTO-LIMPIANTES
 function renderSuggestions(suggestions) {
-  suggestionsContainer.innerHTML = '';
-  
-  // Show only active suggestions
   const activeSugs = (suggestions || []).filter(s => s.status === 'active');
-  suggestionsCountBadge.textContent = activeSugs.length;
+  if (suggestionsCountBadge) suggestionsCountBadge.textContent = activeSugs.length;
+
+  const json = JSON.stringify(activeSugs);
+  if (json === lastRenderedSuggestionsJson) return;
+  lastRenderedSuggestionsJson = json;
+
+  suggestionsContainer.innerHTML = '';
 
   if (activeSugs.length === 0) {
     suggestionsContainer.innerHTML = `
@@ -750,6 +771,10 @@ function discussSuggestionInChat(title) {
 
 // 9. Render Decisions
 function renderDecisions(decisions) {
+  const json = JSON.stringify(decisions || []);
+  if (json === lastRenderedDecisionsJson) return;
+  lastRenderedDecisionsJson = json;
+
   decisionsContainer.innerHTML = '';
   if (decisions.length === 0) {
     decisionsContainer.innerHTML = '<p class="text-slate-400 text-xs py-2">No hay solicitudes de aprobación pendientes.</p>';
@@ -813,8 +838,14 @@ async function respondDecision(decId, status) {
 
 // 10. Render Skills Hub & Creator
 function renderSkills(skills) {
+  const json = JSON.stringify(skills || []);
+  let activeCount = (skills || []).filter(s => s.is_active).length;
+  if (activeSkillsCount) activeSkillsCount.textContent = `${activeCount} / ${(skills || []).length}`;
+  
+  if (json === lastRenderedSkillsJson) return;
+  lastRenderedSkillsJson = json;
+
   skillsContainer.innerHTML = '';
-  let activeCount = 0;
 
   skills.forEach(skill => {
     if (skill.is_active) activeCount++;
@@ -1285,7 +1316,13 @@ async function confirmResetWorkspace() {
       chatMessagesEl.innerHTML = '';
       appendAssistantMessage('¡Hola! Soy Hermes, tu PM asistente. El workspace ha sido reiniciado por completo. ¿Qué proyecto deseas aperturar o por dónde comenzamos?', false);
       
-      // Explicitly reset Gantt chart, badge and clock state
+      lastRenderedSkillsJson = '';
+      lastRenderedWorkersJson = '';
+      lastRenderedSuggestionsJson = '';
+      lastRenderedDecisionsJson = '';
+      lastRenderedProjectsJson = '';
+      lastRenderedGanttJson = '';
+      lastRenderedCalendarJson = '';
       renderGanttChart([]);
       if (data.clock_state) {
         renderClockState(data.clock_state);
