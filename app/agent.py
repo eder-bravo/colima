@@ -728,13 +728,119 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
     talents = conn.execute("SELECT name, role, seniority, productivity_factor FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
     tasks = conn.execute("SELECT id, title, assignee_name, status, estimated_hours, completed_hours, priority, blocker_reason FROM tasks WHERE workspace_id = ?;", (workspace_id,)).fetchall()
     projects = conn.execute("SELECT title, tech_stack, target_deadline, status FROM projects WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+    
+    # Fetch last message from Hermes to understand multi-turn conversation context
+    last_hermes_row = conn.execute("""
+        SELECT content FROM chat_messages 
+        WHERE workspace_id = ? AND sender = 'hermes' 
+        ORDER BY created_at DESC LIMIT 1;
+    """, (workspace_id,)).fetchone()
+    last_hermes_msg = (last_hermes_row["content"] if last_hermes_row else "").lower()
+
+    # Get current simulation date for accurate calendar scheduling
+    sim_row = conn.execute("SELECT current_sim_time FROM global_simulation WHERE id = 1;").fetchone()
     conn.close()
+
+    current_sim_dt_str = "12 de Septiembre, 2030"
+    if sim_row and sim_row["current_sim_time"]:
+        try:
+            s_dt = datetime.fromisoformat(sim_row["current_sim_time"])
+            months_es = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            current_sim_dt_str = f"{s_dt.day} de {months_es[s_dt.month - 1]}, {s_dt.year}"
+        except Exception:
+            pass
 
     executed_tools = []
     tool_results = []
-    thinking = "Analizando contexto y base de datos del proyecto..."
-    
-    # 0. Preguntas sobre perfiles específicos de trabajadores
+    thinking = "Analizando contexto conversacional y base de datos del proyecto..."
+    final_text = ""
+
+    # Check if user is giving an affirmative confirmation (si, ok, adelante, dale, procede, etc.)
+    is_affirmation = any(user_lower == aff or user_lower.startswith(aff + " ") or user_lower.endswith(" " + aff) or aff in user_lower for aff in [
+        "si", "sí", "ok", "adelante", "ok adelante", "dale", "procede", "hazlo", "por favor", "claro", "de acuerdo", "agendala", "agenda", "agéndala", "agendar", "programa", "confirmo", "correcto", "perfecto"
+    ])
+
+    # 0. MULTI-TURN CONVERSATIONAL CONFIRMATIONS
+    if is_affirmation and any(k in last_hermes_msg for k in ["agende", "reunión", "reunion", "sesión", "sesion", "alineación", "alineacion", "kickoff", "checkpoint"]):
+        # User confirmed scheduling a meeting!
+        target_person = "el equipo"
+        for t in talents:
+            f_name = t["name"].split()[0].lower()
+            if f_name in last_hermes_msg:
+                target_person = t["name"]
+                break
+        
+        m_title = f"Reunión de Alineación con {target_person}" if target_person != "el equipo" else "Reunión de Sincronización de Equipo"
+        if "qa" in last_hermes_msg or "calidad" in last_hermes_msg:
+            m_title = "Reunión de Alineación: Estrategia de QA con Lucía Méndez"
+            target_person = "Lucía Méndez"
+        elif "kickoff" in last_hermes_msg:
+            m_title = "Sprint Kickoff & Alineación General"
+            target_person = "Todo el equipo"
+        elif "checkpoint" in last_hermes_msg:
+            m_title = "Checkpoint de Avance & Riesgos"
+
+        m_args = {
+            "title": m_title,
+            "sim_date": current_sim_dt_str,
+            "time_slot": "10:00 AM",
+            "attendees": f"{target_person}, Tech Lead & PM" if target_person != "Todo el equipo" else "Todo el equipo",
+            "agenda": "Alineación de objetivos técnicos, criterios de aceptación y resolución de dudas sobre los entregables."
+        }
+        m_res = execute_tool(workspace_id, "schedule_meeting", m_args)
+        executed_tools.append({"tool": "schedule_meeting", "args": m_args})
+        tool_results.append({"tool": "schedule_meeting", "result": m_res})
+
+        final_text = (
+            f"¡Excelente! He agendado la reunión en el calendario:\n\n"
+            f"📅 **{m_title}**\n"
+            f"• **Fecha:** {current_sim_dt_str} a las 10:00 AM\n"
+            f"• **Asistentes:** {m_args['attendees']}\n"
+            f"• **Objetivo:** {m_args['agenda']}\n\n"
+            f"Puedes ver la reunión registrada en la pestaña **4. Mi Calendario**. ¿Deseas que continuemos definiendo el backlog o revisamos la capacidad del equipo?"
+        )
+
+    elif is_affirmation and any(k in last_hermes_msg for k in ["crear la tarea", "cree la tarea", "asigne la tarea", "proceda a crear"]):
+        # User confirmed creating a task
+        target_role = "Senior QA Automation Engineer"
+        target_name = "Lucía Méndez"
+        task_title = "Estrategia de QA y Automatización de Pruebas (85% Cobertura)"
+        
+        if "scoring" in last_hermes_msg or "riesgo" in last_hermes_msg:
+            target_role = "Senior Fullstack Engineer"
+            target_name = "Ana Morales"
+            task_title = "Motor de Scoring Crediticio & Reglas de Riesgo"
+        elif "pasarela" in last_hermes_msg or "pago" in last_hermes_msg:
+            target_role = "Mid Backend Developer"
+            target_name = "Diego Torres"
+            task_title = "Pasarela de Pagos, SPEI & Dispersión Automática"
+        elif "portal" in last_hermes_msg or "react" in last_hermes_msg:
+            target_role = "Junior Frontend Developer"
+            target_name = "Carlos Ruiz"
+            task_title = "Portal Web React & Flujo de Onboarding KYC"
+        elif "infraestructura" in last_hermes_msg or "docker" in last_hermes_msg or "cloud" in last_hermes_msg:
+            target_role = "DevOps & Cloud Engineer"
+            target_name = "Roberto Silva"
+            task_title = "Infraestructura Cloud, Docker & CI/CD Pipelines"
+
+        t_args = {
+            "title": task_title,
+            "description": "Definición y ejecución del módulo crítico para el sprint.",
+            "role_required": target_role,
+            "estimated_hours": 18.0,
+            "assignee_name": target_name,
+            "priority": "high"
+        }
+        t_res = execute_tool(workspace_id, "create_task", t_args)
+        executed_tools.append({"tool": "create_task", "args": t_args})
+        tool_results.append({"tool": "create_task", "result": t_res})
+
+        final_text = (
+            f"Listo, he creado la tarea **'{task_title}'** y se la asigné a **{target_name}** en el tablero Kanban.\n\n"
+            f"¿Deseas que agende una breve reunión de alineación con {target_name.split()[0]} en el calendario para revisar los alcances de esta entrega?"
+        )
+
+    # 0.1 Preguntas sobre perfiles específicos de trabajadores
     matched_profile = None
     for t in talents:
         first_name = t["name"].split()[0].lower()
