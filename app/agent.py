@@ -11,14 +11,16 @@ from app.db import get_db_connection
 BASE_HERMES_PROMPT = """Eres Hermes, un Technical Product Manager (PM) autónomo ágil, estructurado, proactivo, analítico y muy humano.
 
 RESPONSABILIDADES COMO PM:
-1. APERTURA Y DEFINICIÓN DE PROYECTOS: Puedes conversar con el usuario para entender nuevos productos/proyectos, hacer preguntas clave de alcance y crear formalmente el proyecto y su backlog.
-2. GESTIÓN DE EQUIPO Y CARGA: Puedes responder preguntas sobre el equipo, analizar la carga de trabajo, productividad y horas asignadas a cada desarrollador para evitar saturación o balancear tareas.
-3. KANBAN Y CEREMONIAS: Planificas tareas, agendas reuniones de kickoff/checkpoints y escalas decisiones gerenciales críticas.
+1. APERTURA Y DEFINICIÓN DE PROYECTOS: Conversas con el usuario para entender productos, requerimientos y alcances. CUANDO EL USUARIO TE PIDA CREAR/APERTURAR UN PROYECTO O TE DÉ SUS DETALLES (título, descripción, stack, plazo), DEBES INVOCAR INMEDIATAMENTE LA HERRAMIENTA `create_project`.
+2. CREACIÓN DE BACKLOG Y TAREAS KANBAN: Al aperturar un proyecto o cuando el usuario pida planificar el sprint o crear tareas, DEBES INVOCAR `create_task` para cada módulo o entregable clave asignándolo a un desarrollador según su rol en el equipo. NUNCA digas "procederé a crear el backlog" sin invocar la herramienta `create_task` en ese mismo turno.
+3. CALENDARIO Y CEREMONIAS: Agenda reuniones clave (Sprint Kickoff, Checkpoint de Avance, Dailies) invocando la herramienta `schedule_meeting`.
+4. GESTIÓN DE EQUIPO Y CARGA: Responde preguntas sobre el equipo usando `get_talent_pool` y `get_team_workload`.
 
 REGLAS DE COMUNICACIÓN Y TONO (CRÍTICAS):
-1. HABLA COMO UN PM REAL: Sé directo, conciso, amigable y orientado a la acción (máximo 2 a 4 oraciones por respuesta a menos que presentes un reporte formal estructurado).
-2. NUNCA menciones nombres de funciones o herramientas técnicas en el texto (NUNCA digas 'get_talent_pool()', 'create_project()', etc.). Ejecuta las acciones en segundo plano.
-3. PREGUNTAS SOBRE EL ESTADO ACTUAL: Usa la información en tiempo real que tienes del proyecto, equipo y tareas para responder con precisión y naturalidad a cualquier pregunta del usuario.
+1. ACCIÓN REAL CON HERRAMIENTAS: No prometas acciones a futuro en el texto ("ahora crearé el proyecto", "procederé a agregar las tareas"). EJECUTA las llamadas a las funciones (`create_project`, `create_task`, `schedule_meeting`) en tu respuesta. NUNCA afirmes haber creado un proyecto o tarea si no has llamado a la función correspondiente.
+2. HABLA COMO UN PM REAL: Sé directo, conciso, amigable y orientado a la acción (máximo 2 a 4 oraciones por respuesta confirmando lo realizado y proponiendo el siguiente paso).
+3. NUNCA menciones nombres de funciones técnicas en el texto visible al usuario (no digas 'ejecuté create_project()'). Habla naturalmente ("He aperturado el proyecto y distribuido las tareas en el Kanban...").
+4. ESTADO EN TIEMPO REAL: Revisa siempre el estado del workspace antes de responder.
 """
 
 GEMINI_TOOLS_DECLARATION = [
@@ -529,12 +531,11 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
 
     # Ultra-reliable low-latency models
     CANDIDATE_MODELS = [
-        "gemini-2.5-flash-lite",
         "gemini-3.1-flash-lite",
         "gemini-3.5-flash-lite",
-        "gemini-flash-latest",
-        "gemini-2.5-flash",
-        "gemma-4-26b-a4b-it"
+        "gemini-flash-lite-latest",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash"
     ]
     headers = {
         "Content-Type": "application/json",
@@ -622,19 +623,25 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                 print(f"[AGENT] No candidates in response → smart fallback")
                 return await run_smart_fallback(workspace_id, user_message, system_instruction)
             
-            content_resp = candidates[0].get("content", {})
-            parts = content_resp.get("parts", [])
-            
-            func_calls = [p.get("functionCall") for p in parts if "functionCall" in p]
-            text_parts = [p.get("text") for p in parts if "text" in p]
-            
-            if text_parts:
-                raw_text = "\n".join(text_parts)
-                print(f"[AGENT] raw_text (first 300): {raw_text[:300]!r}")
-                final_text = strip_thinking_tokens(raw_text)
-                print(f"[AGENT] stripped (first 200): {final_text[:200]!r}")
+            loop_turn = 0
+            while loop_turn < 4:
+                loop_turn += 1
+                content_resp = candidates[0].get("content", {})
+                parts = content_resp.get("parts", [])
+                
+                func_calls = [p.get("functionCall") for p in parts if "functionCall" in p]
+                text_parts = [p.get("text") for p in parts if "text" in p]
+                
+                if text_parts:
+                    raw_text = "\n".join(text_parts)
+                    stripped = strip_thinking_tokens(raw_text)
+                    if stripped and len(stripped.strip()) > 3:
+                        final_text = stripped
 
-            if func_calls:
+                if not func_calls:
+                    break
+
+                # Execute function calls
                 contents.append({"role": "model", "parts": parts})
                 tool_response_parts = []
                 for fc in func_calls:
@@ -659,17 +666,15 @@ async def run_hermes_agent(workspace_id: str, user_message: str, api_key: Option
                 contents.append({"role": "user", "parts": tool_response_parts})
                 payload["contents"] = contents
                 
-                res2 = await client.post(url, headers=headers, json=payload)
-                if res2.status_code == 200:
-                    data2 = res2.json()
-                    parts2 = data2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                    raw2 = "\n".join([p.get("text") for p in parts2 if "text" in p])
-                    clean2 = strip_thinking_tokens(raw2)
-                    if clean2 and len(clean2.strip()) > 5:
-                        if final_text and final_text not in clean2:
-                            final_text = f"{final_text}\n\n{clean2}"
-                        else:
-                            final_text = clean2
+                res_loop = await client.post(url, headers=headers, json=payload)
+                if res_loop.status_code == 200:
+                    data_loop = res_loop.json()
+                    candidates = data_loop.get("candidates", [])
+                    if not candidates:
+                        break
+                else:
+                    print(f"[AGENT] Tool loop request failed: {res_loop.status_code}")
+                    break
 
 
 
@@ -765,8 +770,61 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
         final_text = f"¡Todo excelente por acá! Tenemos {p_count} proyecto(s) y {t_count} trabajadores en el equipo. ¿Revisamos el sprint, planificamos tareas o vemos las sugerencias de mejora?"
 
     # 4. Definición / Apertura de proyectos
-    elif any(k in user_lower for k in ["definir proyecto", "nuevo proyecto", "crear proyecto", "aperturar", "iniciar proyecto"]):
-        final_text = "¡Perfecto! Como PM estructuro el proyecto. Cuéntame:\n1. ¿Cuál es el objetivo principal del producto?\n2. ¿Qué stack tecnológico prefieres (ej. FastAPI, React, Node)?\n3. ¿Cuál es nuestra fecha estimada de entrega o MVP?"
+    elif any(k in user_lower for k in ["definir proyecto", "nuevo proyecto", "crear proyecto", "aperturar", "iniciar proyecto", "micro-préstamos", "préstamos", "plataforma"]) or (len(user_message) > 80 and not projects):
+        # Extract or construct project title
+        p_title = "Plataforma de Micro-Préstamos para Emprendedores" if "préstamo" in user_lower or "prestamo" in user_lower else "Fintech MVP Digital"
+        p_desc = user_message[:200]
+        
+        prj_args = {
+            "title": p_title,
+            "description": p_desc,
+            "tech_stack": "FastAPI, React, PostgreSQL, Docker",
+            "target_deadline": "1 mes (30 días)"
+        }
+        p_res = execute_tool(workspace_id, "create_project", prj_args)
+        executed_tools.append({"tool": "create_project", "args": prj_args})
+        tool_results.append({"tool": "create_project", "result": p_res})
+
+        # Create standard tasks for the team
+        tasks_to_create = [
+            {"title": "Arquitectura Backend & Motor de Scoring Crediticio", "role": "Senior Fullstack Engineer", "hours": 24.0, "prio": "urgent"},
+            {"title": "Portal Web React & Flujo de Onboarding KYC", "role": "Junior Frontend Developer", "hours": 20.0, "prio": "high"},
+            {"title": "Pasarela de Pagos & Webhooks de Dispersión SPEI", "role": "Mid Backend Developer", "hours": 22.0, "prio": "urgent"},
+            {"title": "Infraestructura Cloud, Docker & CI/CD Pipelines", "role": "DevOps & Cloud Engineer", "hours": 14.0, "prio": "medium"},
+            {"title": "Plan de Pruebas Unitarias & Automatización E2E", "role": "Senior QA Automation Engineer", "hours": 18.0, "prio": "high"}
+        ]
+        
+        for t in tasks_to_create:
+            assignee = "Ana Morales"
+            for p in talents:
+                if t["role"].lower() in p["role"].lower() or p["role"].lower() in t["role"].lower():
+                    assignee = p["name"]
+                    break
+            
+            t_args = {
+                "title": t["title"],
+                "description": f"Alcance crítico para el MVP de {p_title}.",
+                "role_required": t["role"],
+                "estimated_hours": t["hours"],
+                "assignee_name": assignee,
+                "priority": t["prio"]
+            }
+            c_res = execute_tool(workspace_id, "create_task", t_args)
+            executed_tools.append({"tool": "create_task", "args": t_args})
+            tool_results.append({"tool": "create_task", "result": c_res})
+
+        m_args = {
+            "title": f"Sprint 1 Kickoff — {p_title}",
+            "sim_date": "Día 1",
+            "time_slot": "09:30 AM",
+            "attendees": "Todo el equipo",
+            "agenda": "Alineación de objetivos de entrega a 30 días y distribución del backlog."
+        }
+        m_res = execute_tool(workspace_id, "schedule_meeting", m_args)
+        executed_tools.append({"tool": "schedule_meeting", "args": m_args})
+        tool_results.append({"tool": "schedule_meeting", "result": m_res})
+
+        final_text = f"¡Proyecto **{p_title}** aperturado formalmente! He creado el backlog inicial con {len(tasks_to_create)} tareas asignadas al equipo y agendé la reunión de Kickoff en el calendario." 
 
     # 5. Proyectos activos
     elif any(k in user_lower for k in ["proyectos activos", "que proyectos", "qué proyectos", "mis proyectos", "cuantos proyectos", "cuántos proyectos"]):
