@@ -1,12 +1,18 @@
 import os
 import json
 import asyncio
+import base64
+import hashlib
+import hmac
+import secrets
+import urllib.parse
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Depends, Request
-from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, JSONResponse
+import httpx
+from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Depends, Request, Response
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -49,6 +55,54 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+
+# ==================== Google OAuth 2.0 & Session Security ====================
+SESSION_COOKIE_NAME = "colima_session"
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "colima-workshop-super-secret-key-2026")
+
+def get_google_oauth_credentials():
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "https://colima.ederbravo.com/auth/google/callback").strip()
+
+    id_file = os.environ.get("GOOGLE_CLIENT_ID_FILE", "/run/secrets/colima_google_client_id")
+    secret_file = os.environ.get("GOOGLE_CLIENT_SECRET_FILE", "/run/secrets/colima_google_client_secret")
+
+    if os.path.exists(id_file):
+        try:
+            with open(id_file, "r") as f:
+                client_id = f.read().strip()
+        except Exception:
+            pass
+
+    if os.path.exists(secret_file):
+        try:
+            with open(secret_file, "r") as f:
+                client_secret = f.read().strip()
+        except Exception:
+            pass
+
+    return client_id, client_secret, redirect_uri
+
+def create_session_token(data: dict) -> str:
+    payload = json.dumps(data)
+    b64_payload = base64.urlsafe_b64encode(payload.encode()).decode()
+    sig = hmac.new(SESSION_SECRET.encode(), b64_payload.encode(), hashlib.sha256).hexdigest()
+    return f"{b64_payload}.{sig}"
+
+def verify_session_token(token: str) -> Optional[dict]:
+    if not token or "." not in token:
+        return None
+    try:
+        b64_payload, sig = token.rsplit(".", 1)
+        expected_sig = hmac.new(SESSION_SECRET.encode(), b64_payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        payload = base64.urlsafe_b64decode(b64_payload.encode()).decode()
+        return json.loads(payload)
+    except Exception:
+        return None
+
 app = FastAPI(
     title="Colima — Asistentes PM Autónomos con IA",
     description="Portal de práctica interactiva para talleres de gestión de software con IA y agentes autónomos.",
@@ -63,6 +117,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+
+    # Public routes that never require auth
+    if path.startswith("/static") or path in [
+        "/login", "/auth/google/login", "/auth/google/callback", 
+        "/auth/logout", "/auth/me", "/healthz", "/api/simulation/stream", "/favicon.ico"
+    ]:
+        return await call_next(request)
+
+    # Check session cookie or Bearer Authorization header
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+
+    user_session = verify_session_token(token) if token else None
+
+    # If unauthenticated:
+    if not user_session:
+        # API calls -> 401 JSON with redirect hint
+        if path.startswith("/api/"):
+            return JSONResponse(status_code=401, content={"error": "unauthorized", "redirect": "/login"})
+        # Page navigation -> redirect to /login
+        return RedirectResponse(url="/login", status_code=303)
+
+    request.state.user = user_session
+    return await call_next(request)
+
+
 
 @app.get("/healthz")
 async def healthz():
@@ -620,3 +707,133 @@ async def index_page():
 async def instructor_page():
     with open("/app/app/static/instructor.html", "r", encoding="utf-8") as f:
         return f.read()
+
+
+# ==================== Google OAuth Endpoints ====================
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token and verify_session_token(token):
+        return RedirectResponse(url="/", status_code=303)
+    login_path = "/app/app/static/login.html"
+    if os.path.exists(login_path):
+        with open(login_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>Login Page</h1>"
+
+@app.get("/auth/google/login")
+async def google_login(request: Request):
+    client_id, client_secret, redirect_uri = get_google_oauth_credentials()
+    if not client_id:
+        return RedirectResponse(
+            url="/login?error=" + urllib.parse.quote("Google OAuth no configurado aún en el servidor. Configura GOOGLE_CLIENT_ID."),
+            status_code=303
+        )
+
+    state = secrets.token_urlsafe(16)
+    google_auth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={urllib.parse.quote(client_id)}&"
+        f"redirect_uri={urllib.parse.quote(redirect_uri)}&"
+        f"response_type=code&"
+        f"scope=openid%20email%20profile&"
+        f"state={state}&"
+        f"prompt=select_account"
+    )
+    response = RedirectResponse(url=google_auth_url, status_code=303)
+    response.set_cookie(key="oauth_state", value=state, httponly=True, max_age=600, samesite="lax")
+    return response
+
+@app.get("/auth/google/callback")
+async def google_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error:
+        return RedirectResponse(url=f"/login?error={urllib.parse.quote('Acceso cancelado por Google: ' + error)}", status_code=303)
+    
+    if not code:
+        return RedirectResponse(url="/login?error=Código+de+autorización+no+proporcionado", status_code=303)
+
+    client_id, client_secret, redirect_uri = get_google_oauth_credentials()
+    if not client_id or not client_secret:
+        return RedirectResponse(url="/login?error=Credenciales+de+Google+OAuth+incompletas", status_code=303)
+
+    saved_state = request.cookies.get("oauth_state")
+    if saved_state and state and saved_state != state:
+        return RedirectResponse(url="/login?error=Estado+CSRF+inválido.+Intenta+de+nuevo.", status_code=303)
+
+    token_url = "https://oauth2.googleapis.com/token"
+    token_data = {
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            token_res = await client.post(token_url, data=token_data)
+            if token_res.status_code != 200:
+                print(f"[OAuth Error] Token exchange failed: {token_res.text}")
+                return RedirectResponse(url="/login?error=Fallo+al+canjear+código+con+Google", status_code=303)
+
+            token_json = token_res.json()
+            access_token = token_json.get("access_token")
+
+            userinfo_res = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            if userinfo_res.status_code != 200:
+                return RedirectResponse(url="/login?error=Fallo+al+obtener+perfil+de+Google", status_code=303)
+
+            userinfo = userinfo_res.json()
+            email = userinfo.get("email", "").strip().lower()
+            name = userinfo.get("name", "").strip() or email.split("@")[0]
+            picture = userinfo.get("picture", "")
+
+            ws_info = get_or_create_workspace_by_email(email, name)
+            workspace_id = ws_info["workspace_id"]
+
+            session_data = {
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "workspace_id": workspace_id
+            }
+            session_token = create_session_token(session_data)
+
+            response = RedirectResponse(url="/", status_code=303)
+            response.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=session_token,
+                max_age=2592000,
+                httponly=True,
+                samesite="lax",
+                secure=True
+            )
+            response.delete_cookie("oauth_state")
+            return response
+
+    except Exception as exc:
+        print(f"[OAuth Exception]: {exc}")
+        return RedirectResponse(url="/login?error=Error+de+comunicación+con+servidores+de+Google", status_code=303)
+
+@app.get("/auth/me")
+async def get_current_user(request: Request):
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    user = verify_session_token(token) if token else None
+    if not user:
+        return {"authenticated": False}
+    return {
+        "authenticated": True,
+        "email": user.get("email"),
+        "name": user.get("name"),
+        "picture": user.get("picture"),
+        "workspace_id": user.get("workspace_id")
+    }
+
+@app.get("/auth/logout")
+async def auth_logout():
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    return response

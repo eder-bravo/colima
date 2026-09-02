@@ -692,16 +692,13 @@
 
         <div id="profile-error-msg" class="text-[11px] text-rose-500 font-semibold hidden"></div>
 
-        <div class="pt-2 flex items-center justify-between">
-          <button type="button" onclick="quickSwitchNewAccount()" class="text-[11px] text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">
-            <i class="fa-solid fa-user-plus text-[10px]"></i> Nuevo Perfil Limpio
-          </button>
+        <div class="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 mt-3 pt-3">
+          <a href="/auth/logout" class="text-[11px] text-rose-500 hover:text-rose-700 font-semibold flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i> Cerrar Sesión
+          </a>
           <div class="flex items-center gap-2">
             <button type="button" onclick="closeProfileModal()" class="px-3 py-1.5 rounded-xl text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition">
               Cerrar
-            </button>
-            <button type="submit" id="btn-save-profile" class="px-4 py-1.5 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-xs transition flex items-center gap-1.5">
-              <span>🚀 Entrar a mi Workspace</span>
             </button>
           </div>
         </div>
@@ -709,6 +706,6 @@
     </div>
   </div>
 
-<script src="/static/app.js?v=7.5"></script>
+<script src="/static/app.js?v=7.6"></script>
 </body>
 </html>

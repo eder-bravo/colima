@@ -1,3 +1,34 @@
+
+let currentUserProfile = null;
+
+async function checkAuthAndInitSession() {
+  try {
+    const res = await fetch('/auth/me');
+    if (!res.ok) {
+      window.location.href = '/login';
+      return false;
+    }
+    const data = await res.json();
+    if (!data.authenticated) {
+      window.location.href = '/login';
+      return false;
+    }
+
+    currentUserProfile = data;
+    currentUserEmail = data.email || '';
+    currentUserName = data.name || '';
+    if (data.workspace_id) {
+      workspaceId = data.workspace_id;
+      localStorage.setItem(STORAGE_KEYS.WORKSPACE_ID, workspaceId);
+    }
+    updateUserDisplay();
+    return true;
+  } catch (err) {
+    console.error('Auth verification failed:', err);
+    return true;
+  }
+}
+
 let currentSkillsMap = {};
 let currentSimDateObj = { day: 12, month: 9, monthName: 'Septiembre', year: 2030, formatted: '12 de Septiembre, 2030' };
 let lastCalendarEvents = [];
@@ -1589,9 +1620,11 @@ function discussInboxInChat(title) {
 // Start
 initTheme();
 updateApiKeyUI();
-setupSSE();
-loadWorkspaceData();
-setupEventListeners();
+checkAuthAndInitSession().then(() => {
+  setupSSE();
+  loadWorkspaceData();
+  setupEventListeners();
+});
 
 
 
@@ -1627,6 +1660,8 @@ window.scheduleMeetingWithHermes = scheduleMeetingWithHermes;
 // ==================== User Profile / Gmail Login ====================
 function updateUserDisplay() {
   const displayEl = document.getElementById('user-display-name');
+  const userPill = document.getElementById('btn-user-profile');
+
   if (displayEl) {
     if (currentUserName) {
       displayEl.textContent = currentUserName.split(' ')[0];
@@ -1636,7 +1671,18 @@ function updateUserDisplay() {
       displayEl.title = currentUserEmail;
     } else {
       displayEl.textContent = 'Identificarse';
-      displayEl.title = 'Haz clic para ingresar con tu correo de Gmail';
+    }
+  }
+
+  // Update avatar icon if Google profile picture is available
+  if (userPill && currentUserProfile && currentUserProfile.picture) {
+    const iconEl = userPill.querySelector('i.fa-circle-user');
+    if (iconEl) {
+      const img = document.createElement('img');
+      img.src = currentUserProfile.picture;
+      img.className = 'w-5 h-5 rounded-full border border-indigo-300 dark:border-indigo-700 object-cover';
+      img.alt = currentUserName;
+      iconEl.replaceWith(img);
     }
   }
 }
