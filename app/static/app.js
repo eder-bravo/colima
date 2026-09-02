@@ -336,11 +336,41 @@ function renderProjects(projects, ws, tasks) {
 
   const hasProject = (projects && projects.length > 0) || Boolean(ws.project_name);
 
+  // Always sync Gantt chart with current tasks
+  renderGanttChart(tasks || []);
+
+  const cols = {
+    backlog: document.getElementById('col-backlog'),
+    in_progress: document.getElementById('col-in_progress'),
+    review: document.getElementById('col-review'),
+    done: document.getElementById('col-done')
+  };
+  const counts = { backlog: 0, in_progress: 0, review: 0, done: 0 };
+  Object.values(cols).forEach(c => { if (c) c.innerHTML = ''; });
+
   if (!hasProject) {
     if (emptyState) emptyState.classList.remove('hidden');
     if (banner) banner.classList.add('hidden');
     if (kanbanView) kanbanView.classList.add('hidden');
     if (ganttView) ganttView.classList.add('hidden');
+
+    Object.keys(cols).forEach(key => {
+      if (cols[key]) {
+        cols[key].innerHTML = `
+          <div class="h-20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-600">
+            Sin tareas
+          </div>
+        `;
+      }
+    });
+    const cB = document.getElementById('count-backlog');
+    const cP = document.getElementById('count-in_progress');
+    const cR = document.getElementById('count-review');
+    const cD = document.getElementById('count-done');
+    if (cB) cB.textContent = 0;
+    if (cP) cP.textContent = 0;
+    if (cR) cR.textContent = 0;
+    if (cD) cD.textContent = 0;
     return;
   }
 
@@ -1228,12 +1258,20 @@ async function confirmResetWorkspace() {
       method: 'POST'
     });
     if (res.ok) {
+      const data = await res.json();
       closeResetModal();
       chatMessagesEl.innerHTML = '';
       appendAssistantMessage('¡Hola! Soy Hermes, tu PM asistente. El workspace ha sido reiniciado por completo. ¿Qué proyecto deseas aperturar o por dónde comenzamos?', false);
+      
+      // Explicitly reset Gantt chart, badge and clock state
+      renderGanttChart([]);
+      if (data.clock_state) {
+        renderClockState(data.clock_state);
+      }
+      
       loadWorkspaceData();
       loadInbox();
-      appendSystemMessage('🔄 **Workspace reiniciado con éxito.** Todos los datos han vuelto a su estado inicial.');
+      appendSystemMessage('🔄 **Workspace reiniciado con éxito.** Todos los datos, el cronograma Gantt y el reloj de simulación han vuelto a su estado inicial.');
     } else {
       alert('Error al reiniciar el workspace');
     }

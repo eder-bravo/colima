@@ -507,10 +507,11 @@ async def clear_chat_history(workspace_id: str):
 
 @app.post("/api/workspaces/{workspace_id}/reset")
 async def reset_workspace_endpoint(workspace_id: str):
-    """Full workspace reset — wipes all data and re-initializes defaults."""
+    """Full workspace reset — wipes all data, resets clock, and re-initializes defaults."""
     ensure_workspace(workspace_id)
     reset_workspace(workspace_id)
-    return {"status": "reset", "workspace_id": workspace_id}
+    clock_state = sim_engine.reset_clock()
+    return {"status": "reset", "workspace_id": workspace_id, "clock_state": clock_state}
 
 
 # ==================== Hermes Inbox (Autonomous PM Messages) ====================
