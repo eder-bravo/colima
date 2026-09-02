@@ -80,11 +80,7 @@
 
     <!-- Action Controls -->
     <div class="flex items-center space-x-1.5">
-      <!-- User Profile Pill -->
-      <button id="btn-user-profile" onclick="openProfileModal()" title="Perfil de Participante (Gmail)" class="text-xs bg-indigo-50/80 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition">
-        <i class="fa-solid fa-circle-user text-indigo-500 text-sm"></i>
-        <span id="user-display-name" class="font-bold truncate max-w-[110px]">Identificarse</span>
-      </button>
+
 
       <button id="btn-samples" class="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition">
         <i class="fa-solid fa-file-pdf text-red-500"></i>
@@ -642,70 +638,8 @@
     </div>
   </div>
 
-    <!-- Modal: Identificación de Participante (Gmail) -->
-  <div id="profile-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
-    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-150">
-      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-        <div class="flex items-center space-x-2.5">
-          <div class="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-xs">
-            <i class="fa-solid fa-user-gear"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-sm text-slate-900 dark:text-white">Perfil de Participante</h3>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">Workspace individual para el taller</p>
-          </div>
-        </div>
-        <button onclick="closeProfileModal()" class="w-7 h-7 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center transition">
-          <i class="fa-solid fa-xmark text-xs"></i>
-        </button>
-      </div>
+    
 
-      <div class="bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl p-3.5 text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
-        <p class="font-bold flex items-center gap-1.5"><i class="fa-brands fa-google text-red-500"></i> Espacio Individual de Trabajo</p>
-        <p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">Ingresa tu correo de Gmail para conectar tu propio equipo, tablero Kanban y calendario sin mezclar tus pruebas con las de otros participantes.</p>
-      </div>
-
-      <form id="profile-form" onsubmit="event.preventDefault(); submitProfile();" class="space-y-3">
-        <div>
-          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            Correo de Gmail / Institucional <span class="text-rose-500">*</span>
-          </label>
-          <div class="relative">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
-              <i class="fa-solid fa-envelope"></i>
-            </div>
-            <input type="email" id="profile-email-input" placeholder="tu_correo@gmail.com" required class="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            Tu Nombre o Alias
-          </label>
-          <div class="relative">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
-              <i class="fa-solid fa-id-card"></i>
-            </div>
-            <input type="text" id="profile-name-input" placeholder="Ej. Eder Bravo" class="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
-          </div>
-        </div>
-
-        <div id="profile-error-msg" class="text-[11px] text-rose-500 font-semibold hidden"></div>
-
-        <div class="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 mt-3 pt-3">
-          <a href="/auth/logout" class="text-[11px] text-rose-500 hover:text-rose-700 font-semibold flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i> Cerrar Sesión
-          </a>
-          <div class="flex items-center gap-2">
-            <button type="button" onclick="closeProfileModal()" class="px-3 py-1.5 rounded-xl text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition">
-              Cerrar
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
-  </div>
-
-<script src="/static/app.js?v=7.7"></script>
+<script src="/static/app.js?v=7.8"></script>
 </body>
 </html>
