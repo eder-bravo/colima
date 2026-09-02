@@ -1,3 +1,4 @@
+let currentSkillsMap = {};
 let currentSimDateObj = { day: 12, month: 9, monthName: 'Septiembre', year: 2030, formatted: '12 de Septiembre, 2030' };
 let lastCalendarEvents = [];
 let lastRenderedSkillsJson = '';
@@ -921,6 +922,7 @@ function renderSkills(skills) {
   skillsContainer.innerHTML = '';
 
   skills.forEach(skill => {
+    currentSkillsMap[skill.id] = skill;
     const card = document.createElement('div');
     card.className = `bg-white dark:bg-slate-900 border ${skill.is_active ? 'border-indigo-300 dark:border-indigo-800/80' : 'border-slate-200/90 dark:border-slate-800'} rounded-2xl p-4 shadow-xs space-y-2.5 transition`;
     
@@ -945,7 +947,7 @@ function renderSkills(skills) {
       <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHtml(skill.description)}</p>
       
       <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[11px]">
-        <button onclick="openSkillModal('${skill.id}', '${escapeHtml(skill.name)}', '${escapeHtml(skill.prompt_instructions)}')" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1">
+        <button onclick="openSkillModal('${skill.id}')" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1">
           <i class="fa-solid fa-code text-[10px]"></i> Ver / Editar Prompt
         </button>
       </div>
@@ -1029,10 +1031,19 @@ async function saveNewSkill() {
 }
 
 function openSkillModal(skillId, name, prompt) {
-  currentEditingSkillId = skillId;
-  skillModalTitle.innerHTML = `<i class="fa-solid fa-brain text-indigo-500"></i> Habilidad: ${name}`;
-  skillModalPrompt.value = prompt;
-  skillModal.classList.remove('hidden');
+  const skill = currentSkillsMap[skillId] || { id: skillId, name: name, prompt_instructions: prompt };
+  currentEditingSkillId = skill.id;
+  const sName = skill.name || name || 'Configuración';
+  const sPrompt = skill.prompt_instructions || prompt || '';
+  if (skillModalTitle) {
+    skillModalTitle.innerHTML = `<i class="fa-solid fa-brain text-indigo-500"></i> Habilidad: ${escapeHtml(sName)}`;
+  }
+  if (skillModalPrompt) {
+    skillModalPrompt.value = sPrompt;
+  }
+  if (skillModal) {
+    skillModal.classList.remove('hidden');
+  }
 }
 
 function closeSkillModal() {

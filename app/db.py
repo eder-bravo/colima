@@ -66,6 +66,14 @@ DEFAULT_SKILLS = [
         "description": "Escala decisiones críticas (presupuesto, contrataciones, cambios de alcance) a la dirección antes de actuar.",
         "prompt_instructions": "Ante cambios imprevistos de alcance o necesidad de contratar personal, NO tomes la decisión final solo. Usa 'request_managerial_approval' para pedir autorización al Gerente.",
         "is_active": 0
+    },
+    {
+        "id": "skill-executive-briefing",
+        "name": "Minutas & Correo Ejecutivo",
+        "icon": "fa-envelope-open-text",
+        "description": "Redacta informes ejecutivos concisos y formales para directores y clientes.",
+        "prompt_instructions": "Cuando el usuario pida un reporte para directores o minuta, formatea el texto en tono ejecutivo: resumen de 3 bullets, estado del presupuesto y próximos pasos críticos.",
+        "is_active": 0
     }
 ]
 
