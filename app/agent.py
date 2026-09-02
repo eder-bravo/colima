@@ -242,7 +242,8 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
                 "assigned_tasks_count": 0,
                 "total_estimated_hours": 0.0,
                 "completed_hours": 0.0,
-                "saturation": "Libre"
+                "pending_hours": 0.0,
+                "saturation": "Disponible"
             }
         
         for task in tasks:
@@ -251,17 +252,19 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
                 workload[name]["assigned_tasks_count"] += 1
                 workload[name]["total_estimated_hours"] += task["estimated_hours"]
                 workload[name]["completed_hours"] += task["completed_hours"]
+                if task["status"] not in ("done", "review"):
+                    workload[name]["pending_hours"] += max(0.0, task["estimated_hours"] - task["completed_hours"])
         
         for name, data in workload.items():
-            hrs = data["total_estimated_hours"]
+            hrs = data["pending_hours"]
             if hrs > 30:
-                data["saturation"] = "Sobrecargado"
+                data["saturation"] = f"Sobrecargado ({hrs:.0f}h pendientes)"
             elif hrs > 15:
-                data["saturation"] = "Óptimo"
+                data["saturation"] = f"Óptimo ({hrs:.0f}h pendientes)"
             elif hrs > 0:
-                data["saturation"] = "Baja carga"
+                data["saturation"] = f"Baja carga ({hrs:.0f}h pendientes)"
             else:
-                data["saturation"] = "Disponible"
+                data["saturation"] = "Disponible (0h pendientes)"
 
         result = {"team_workload": workload}
 
@@ -287,7 +290,7 @@ def execute_tool(workspace_id: str, tool_name: str, args: Dict[str, Any]) -> Dic
 
         conn.execute("""
         INSERT INTO tasks (id, workspace_id, title, description, role_required, estimated_hours, completed_hours, status, assignee_id, assignee_name, priority, blocker_reason, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0.0, 'in_progress', ?, ?, ?, NULL, ?, ?);
+        VALUES (?, ?, ?, ?, ?, ?, 0.0, 'backlog', ?, ?, ?, NULL, ?, ?);
         """, (
             task_id,
             workspace_id,
@@ -785,19 +788,20 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
         executed_tools.append({"tool": "create_project", "args": prj_args})
         tool_results.append({"tool": "create_project", "result": p_res})
 
-        # Create standard tasks for the team
+        # Create balanced initial tasks distributed across all 5 workers
         tasks_to_create = [
-            {"title": "Arquitectura Backend & Motor de Scoring Crediticio", "role": "Senior Fullstack Engineer", "hours": 24.0, "prio": "urgent"},
-            {"title": "Portal Web React & Flujo de Onboarding KYC", "role": "Junior Frontend Developer", "hours": 20.0, "prio": "high"},
-            {"title": "Pasarela de Pagos & Webhooks de Dispersión SPEI", "role": "Mid Backend Developer", "hours": 22.0, "prio": "urgent"},
-            {"title": "Infraestructura Cloud, Docker & CI/CD Pipelines", "role": "DevOps & Cloud Engineer", "hours": 14.0, "prio": "medium"},
-            {"title": "Plan de Pruebas Unitarias & Automatización E2E", "role": "Senior QA Automation Engineer", "hours": 18.0, "prio": "high"}
+            {"title": "Infraestructura Cloud, Docker & CI/CD Pipelines", "role": "DevOps & Cloud Engineer", "hours": 16.0, "prio": "medium", "worker_key": "roberto"},
+            {"title": "Motor de Scoring Crediticio & Reglas de Riesgo", "role": "Senior Fullstack Engineer", "hours": 20.0, "prio": "urgent", "worker_key": "ana"},
+            {"title": "Pasarela de Pagos, SPEI & Dispersión Automática", "role": "Mid Backend Developer", "hours": 20.0, "prio": "urgent", "worker_key": "diego"},
+            {"title": "Portal Web React & Flujo de Onboarding KYC", "role": "Junior Frontend Developer", "hours": 18.0, "prio": "high", "worker_key": "carlos"},
+            {"title": "Plan de Pruebas Unitarias & Automatización E2E", "role": "Senior QA Automation Engineer", "hours": 18.0, "prio": "high", "worker_key": "lucía"}
         ]
         
         for t in tasks_to_create:
             assignee = "Ana Morales"
+            w_key = t.get("worker_key", "")
             for p in talents:
-                if t["role"].lower() in p["role"].lower() or p["role"].lower() in t["role"].lower():
+                if w_key in p["name"].lower() or t["role"].lower() in p["role"].lower():
                     assignee = p["name"]
                     break
             

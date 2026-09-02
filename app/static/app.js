@@ -256,16 +256,25 @@ function renderWorkers(talent, tasks) {
       seniorityBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">Junior</span>';
     }
 
-    // Calculate worker workload
+    // Calculate worker active pending workload (only active non-finished tasks)
+    const activeTasks = tasks.filter(t => 
+      t.assignee_name && 
+      t.assignee_name.toLowerCase().includes(p.name.toLowerCase()) && 
+      t.status !== 'done' && 
+      t.status !== 'review'
+    );
+    const pendingHours = activeTasks.reduce((acc, t) => acc + Math.max(0, (t.estimated_hours || 0) - (t.completed_hours || 0)), 0);
+    
+    // Overall task statistics
     const workerTasks = tasks.filter(t => t.assignee_name && t.assignee_name.toLowerCase().includes(p.name.toLowerCase()));
     const totalHours = workerTasks.reduce((acc, t) => acc + (t.estimated_hours || 0), 0);
     const completedHours = workerTasks.reduce((acc, t) => acc + (t.completed_hours || 0), 0);
 
-    let saturationBadge = '<span class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">● Disponible</span>';
-    if (totalHours > 30) {
-      saturationBadge = '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-400">⚠️ Sobrecargado</span>';
-    } else if (totalHours > 0) {
-      saturationBadge = '<span class="text-[10px] font-medium text-blue-600 dark:text-blue-400">● En Asignación</span>';
+    let saturationBadge = '<span class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">● Disponible (0h pendientes)</span>';
+    if (pendingHours > 30) {
+      saturationBadge = `<span class="text-[10px] font-bold text-rose-600 dark:text-rose-400">⚠️ Sobrecargado (${Math.round(pendingHours)}h pendientes)</span>`;
+    } else if (pendingHours > 0) {
+      saturationBadge = `<span class="text-[10px] font-medium text-blue-600 dark:text-blue-400">● En Asignación (${Math.round(pendingHours)}h pendientes)</span>`;
     }
 
     const skillsPills = (p.skills || []).map(s => 
@@ -293,9 +302,9 @@ function renderWorkers(talent, tasks) {
       </div>
 
       <div class="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl space-y-1.5 text-[11px]">
-        <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-          <span>Tareas Asignadas: <b>${workerTasks.length}</b></span>
-          <span>Carga: <b>${completedHours}h / ${totalHours}h</b></span>
+        <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px]">
+          <span>Tareas Activas: <b>${activeTasks.length}</b> (Totales: ${workerTasks.length})</span>
+          <span>Pendiente: <b>${Math.round(pendingHours)}h</b></span>
         </div>
         <div class="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
           <div class="h-full bg-indigo-500 rounded-full" style="width: ${totalHours > 0 ? Math.min(100, Math.round(completedHours/totalHours*100)) : 0}%"></div>

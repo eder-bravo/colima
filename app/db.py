@@ -161,6 +161,10 @@ def init_db():
         cursor.execute("ALTER TABLE tasks ADD COLUMN review_feedback TEXT;")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN review_hours REAL DEFAULT 0.0;")
+    except Exception:
+        pass
 
     # Chat Messages
     cursor.execute("""
@@ -286,14 +290,14 @@ def compute_pm_suggestions(workspace_id: str):
         # Clean up stale no-staff suggestion
         conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ? AND workspace_id = ? AND status = 'active';", (f"sug-{workspace_id}-no-staff", workspace_id))
 
-    # Check 2: Worker Overload / Bottleneck
+    # Check 2: Worker Overload / Bottleneck (only active pending tasks)
     workload = {}
     for t in talents:
         workload[t["name"]] = 0.0
     for task in tasks:
         name = task["assignee_name"]
-        if name and name in workload and task["status"] != "done":
-            workload[name] += (task["estimated_hours"] - task["completed_hours"])
+        if name and name in workload and task["status"] not in ("done", "review"):
+            workload[name] += max(0.0, task["estimated_hours"] - task["completed_hours"])
             
     active_overloads = set()
     for name, hrs in workload.items():

@@ -13,7 +13,7 @@ def simulation_tick_workspaces(conn, sim_hours_worked: float):
     for ws in workspaces:
         ws_id = ws["id"]
         
-        # 1. Backlog -> In Progress Activation (for available workers)
+        # 1. Backlog -> In Progress (Pick up next task when worker has no in_progress task)
         talents = conn.execute("SELECT id, name, role FROM talent_profiles WHERE workspace_id = ?;", (ws_id,)).fetchall()
         for t in talents:
             active_cnt = conn.execute("""
@@ -43,7 +43,7 @@ def simulation_tick_workspaces(conn, sim_hours_worked: float):
                         WHERE id = ?;
                     """, (task["id"], t["id"]))
 
-        # 2. Advance In-Progress tasks
+        # 2. Advance In-Progress tasks (Development phase)
         if sim_hours_worked > 0:
             in_progress_tasks = conn.execute("""
                 SELECT t.id, t.estimated_hours, t.completed_hours, p.productivity_factor
@@ -55,99 +55,115 @@ def simulation_tick_workspaces(conn, sim_hours_worked: float):
             for task in in_progress_tasks:
                 factor = task["productivity_factor"] if task["productivity_factor"] else 1.0
                 delta_comp = sim_hours_worked * factor
-                new_comp = min(task["estimated_hours"], task["completed_hours"] + delta_comp)
+                new_comp = task["completed_hours"] + delta_comp
                 
-                new_status = "review" if new_comp >= task["estimated_hours"] * 0.85 else "in_progress"
-
-                conn.execute("""
-                UPDATE tasks
-                SET completed_hours = ?, status = ?, updated_at = ?
-                WHERE id = ?;
-                """, (round(new_comp, 1), new_status, now_iso, task["id"]))
-
-        # 3. Autonomous Hermes Review & Feedback (Review -> Done + Follow-up generation)
-        review_tasks = conn.execute("""
-            SELECT id, title, role_required, estimated_hours, completed_hours, assignee_name, assignee_id, review_feedback
-            FROM tasks
-            WHERE workspace_id = ? AND status = 'review';
-        """, (ws_id,)).fetchall()
-
-        for task in review_tasks:
-            title_lower = task["title"].lower()
-            
-            if any(k in title_lower for k in ["scoring", "riesgo", "algoritmo"]):
-                feedback = "Hermes PM: Aprobado. Reglas de cálculo crediticio validadas contra matriz de riesgo y cobertura de tests al 94%."
-                followup_title = "Optimización de Caché en Redis para Scoring Crediticio"
-                followup_role = "Senior Fullstack Engineer"
-                followup_hours = 12.0
-            elif any(k in title_lower for k in ["react", "frontend", "kyc", "portal", "ui", "onboarding"]):
-                feedback = "Hermes PM: Aprobado. Interfaces responsivas y accesibles; flujo KYC validado sin fricciones en mobile y desktop."
-                followup_title = "Componentes de Alertas y Notificaciones en Vivo en React"
-                followup_role = "Junior Frontend Developer"
-                followup_hours = 10.0
-            elif any(k in title_lower for k in ["pago", "spei", "webhook", "stripe", "dispersión", "dispersion"]):
-                feedback = "Hermes PM: Aprobado. Webhooks y dispersión SPEI validados con idempotencia, manejo de reintentos y logs de auditoría."
-                followup_title = "Módulo de Conciliación Automática de Saldos y Reportes Financieros"
-                followup_role = "Mid Backend Developer"
-                followup_hours = 16.0
-            elif any(k in title_lower for k in ["docker", "ci/cd", "kubernetes", "cloud", "pipeline"]):
-                feedback = "Hermes PM: Aprobado. Pipeline CI/CD automatizado con escaneo de vulnerabilidades y despliegue reproducible en Kubernetes."
-                followup_title = "Monitoreo de Métricas y Alertas de Latencia con Prometheus"
-                followup_role = "DevOps & Cloud Engineer"
-                followup_hours = 12.0
-            elif any(k in title_lower for k in ["qa", "cypress", "prueba", "test", "e2e"]):
-                feedback = "Hermes PM: Aprobado. Suite de pruebas E2E ejecutada con éxito y matriz de cobertura validada para pase a producción."
-                followup_title = "Pruebas de Carga y Concurrencia de API con k6"
-                followup_role = "Senior QA Automation Engineer"
-                followup_hours = 14.0
-            else:
-                feedback = "Hermes PM: Aprobado. Criterios de aceptación cumplidos tras revisión técnica y pruebas de integración."
-                followup_title = None
-                followup_role = None
-                followup_hours = 0.0
-
-            # Complete task with feedback
-            conn.execute("""
-                UPDATE tasks 
-                SET status = 'done', completed_hours = estimated_hours, review_feedback = ?, updated_at = ?
-                WHERE id = ?;
-            """, (feedback, now_iso, task["id"]))
-
-            # Free the developer in talent_profiles
-            if task["assignee_id"]:
-                conn.execute("UPDATE talent_profiles SET availability_status = 'available', current_task_id = NULL WHERE id = ?;", (task["assignee_id"],))
-
-            # Insert Hermes review insight in inbox
-            inbox_id = f"inbox-{int(time.time()*1000)}-{task['id']}"
-            conn.execute("""
-                INSERT INTO hermes_inbox (id, workspace_id, type, title, body, read, sim_time, created_at)
-                VALUES (?, ?, 'insight', ?, ?, 0, 'Sprint 1', ?);
-            """, (
-                inbox_id,
-                ws_id,
-                f"Revisión Aprobada: {task['title']}",
-                f"Hermes ha revisado la entrega de {task['assignee_name'] or 'desarrollador'}.\n\nFeedback: {feedback}",
-                now_iso
-            ))
-
-            # Spawn follow-up task if applicable
-            if followup_title:
-                exists = conn.execute("SELECT id FROM tasks WHERE workspace_id = ? AND title = ?;", (ws_id, followup_title)).fetchone()
-                if not exists:
-                    new_tsk_id = f"tsk-auto-{int(time.time()*1000)}-{task['id']}"
+                # Check if dev completed their part -> Moves to 'review' for QA / Hermes PM inspection
+                if new_comp >= task["estimated_hours"]:
                     conn.execute("""
-                        INSERT INTO tasks (id, workspace_id, title, description, role_required, estimated_hours, completed_hours, status, assignee_id, assignee_name, priority, created_at, updated_at)
-                        VALUES (?, ?, ?, 'Tarea de mejora generada automáticamente por Hermes tras revisión de sprint.', ?, ?, 0.0, 'backlog', ?, ?, 'medium', ?, ?);
-                    """, (new_tsk_id, ws_id, followup_title, followup_role, followup_hours, task["assignee_id"], task["assignee_name"], now_iso, now_iso))
+                    UPDATE tasks
+                    SET completed_hours = estimated_hours, status = 'review', review_hours = 0.0, updated_at = ?
+                    WHERE id = ?;
+                    """, (now_iso, task["id"]))
+                else:
+                    conn.execute("""
+                    UPDATE tasks
+                    SET completed_hours = ?, status = 'in_progress', updated_at = ?
+                    WHERE id = ?;
+                    """, (round(new_comp, 1), now_iso, task["id"]))
 
-        # 4. Recompute suggestions and burnout alerts directly on conn
+        # 3. Advance Review Phase for tasks in 'review' (Hermes & QA Evaluation)
+        # Real-world behavior: Tasks stay in review for ~4h of simulated review time
+        if sim_hours_worked > 0:
+            review_tasks = conn.execute("""
+                SELECT id, title, role_required, estimated_hours, completed_hours, assignee_name, assignee_id, review_feedback, review_hours
+                FROM tasks
+                WHERE workspace_id = ? AND status = 'review';
+            """, (ws_id,)).fetchall()
+
+            for task in review_tasks:
+                current_rev = task["review_hours"] if task["review_hours"] is not None else 0.0
+                new_rev = current_rev + (sim_hours_worked * 0.5)
+                required_review_hours = 4.0
+                
+                if new_rev < required_review_hours:
+                    # Still undergoing review
+                    conn.execute("UPDATE tasks SET review_hours = ?, updated_at = ? WHERE id = ?;", (round(new_rev, 1), now_iso, task["id"]))
+                else:
+                    # Review completed! Generate feedback and move to 'done'
+                    title_lower = task["title"].lower()
+                    
+                    if any(k in title_lower for k in ["scoring", "riesgo", "algoritmo"]):
+                        feedback = "Hermes PM: Aprobado tras revisión técnica. Reglas de cálculo crediticio validadas contra matriz de riesgo y cobertura de tests al 94%."
+                        followup_title = "Optimización de Caché en Redis para Scoring Crediticio"
+                        followup_role = "Senior Fullstack Engineer"
+                        followup_hours = 12.0
+                    elif any(k in title_lower for k in ["react", "frontend", "kyc", "portal", "ui", "onboarding", "administración", "administracion"]):
+                        feedback = "Hermes PM: Aprobado. Interfaces responsivas y accesibles; flujo validado sin fricciones en mobile y desktop."
+                        followup_title = "Componentes de Alertas y Notificaciones en Vivo en React"
+                        followup_role = "Junior Frontend Developer"
+                        followup_hours = 10.0
+                    elif any(k in title_lower for k in ["pago", "spei", "webhook", "stripe", "dispersión", "dispersion"]):
+                        feedback = "Hermes PM: Aprobado tras pruebas sandbox. Webhooks y dispersión SPEI validados con idempotencia y manejo de reintentos."
+                        followup_title = "Módulo de Conciliación Automática de Saldos y Reportes Financieros"
+                        followup_role = "Mid Backend Developer"
+                        followup_hours = 16.0
+                    elif any(k in title_lower for k in ["docker", "ci/cd", "kubernetes", "cloud", "pipeline", "infraestructura"]):
+                        feedback = "Hermes PM: Aprobado. Pipeline CI/CD automatizado con escaneo de vulnerabilidades y despliegue reproducible en clúster."
+                        followup_title = "Monitoreo de Métricas y Alertas de Latencia con Prometheus"
+                        followup_role = "DevOps & Cloud Engineer"
+                        followup_hours = 12.0
+                    elif any(k in title_lower for k in ["qa", "cypress", "prueba", "test", "e2e"]):
+                        feedback = "Hermes PM: Aprobado. Suite de pruebas E2E ejecutada con éxito y matriz de cobertura validada para pase a producción."
+                        followup_title = "Pruebas de Carga y Concurrencia de API con k6"
+                        followup_role = "Senior QA Automation Engineer"
+                        followup_hours = 14.0
+                    else:
+                        feedback = "Hermes PM: Aprobado. Criterios de aceptación y calidad cumplidos satisfactoriamente tras revisión técnica."
+                        followup_title = None
+                        followup_role = None
+                        followup_hours = 0.0
+
+                    conn.execute("""
+                        UPDATE tasks 
+                        SET status = 'done', completed_hours = estimated_hours, review_hours = ?, review_feedback = ?, updated_at = ?
+                        WHERE id = ?;
+                    """, (required_review_hours, feedback, now_iso, task["id"]))
+
+                    # Free the developer in talent_profiles
+                    if task["assignee_id"]:
+                        conn.execute("UPDATE talent_profiles SET availability_status = 'available', current_task_id = NULL WHERE id = ?;", (task["assignee_id"],))
+
+                    # Insert Hermes review insight in inbox
+                    inbox_id = f"inbox-{int(time.time()*1000)}-{task['id']}"
+                    conn.execute("""
+                        INSERT INTO hermes_inbox (id, workspace_id, type, title, body, read, sim_time, created_at)
+                        VALUES (?, ?, 'insight', ?, ?, 0, 'Sprint 1', ?);
+                    """, (
+                        inbox_id,
+                        ws_id,
+                        f"Revisión Aprobada: {task['title']}",
+                        f"Hermes ha revisado la entrega de {task['assignee_name'] or 'desarrollador'}.\n\nFeedback: {feedback}",
+                        now_iso
+                    ))
+
+                    # Spawn follow-up task if applicable
+                    if followup_title:
+                        exists = conn.execute("SELECT id FROM tasks WHERE workspace_id = ? AND title = ?;", (ws_id, followup_title)).fetchone()
+                        if not exists:
+                            new_tsk_id = f"tsk-auto-{int(time.time()*1000)}-{task['id']}"
+                            conn.execute("""
+                                INSERT INTO tasks (id, workspace_id, title, description, role_required, estimated_hours, completed_hours, status, assignee_id, assignee_name, priority, created_at, updated_at)
+                                VALUES (?, ?, ?, 'Tarea de mejora generada automáticamente por Hermes tras revisión de sprint.', ?, ?, 0.0, 'backlog', ?, ?, 'medium', ?, ?);
+                            """, (new_tsk_id, ws_id, followup_title, followup_role, followup_hours, task["assignee_id"], task["assignee_name"], now_iso, now_iso))
+
+        # 4. Recompute suggestions and burnout alerts (ONLY pending hours!)
         talents_all = conn.execute("SELECT id, name, role FROM talent_profiles WHERE workspace_id = ?;", (ws_id,)).fetchall()
         tasks_all = conn.execute("SELECT id, title, assignee_name, estimated_hours, completed_hours, status FROM tasks WHERE workspace_id = ?;", (ws_id,)).fetchall()
         workload = {t["name"]: 0.0 for t in talents_all}
         for task in tasks_all:
             name = task["assignee_name"]
-            if name and name in workload and task["status"] != "done":
-                workload[name] += (task["estimated_hours"] - task["completed_hours"])
+            if name and name in workload and task["status"] not in ("done", "review"):
+                workload[name] += max(0.0, task["estimated_hours"] - task["completed_hours"])
         
         for name, hrs in workload.items():
             slug = name.lower().replace(' ', '-')
