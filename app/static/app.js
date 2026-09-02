@@ -402,6 +402,25 @@ function renderProjects(projects, ws, tasks) {
       `;
     }
 
+    let feedbackHtml = '';
+    if (task.review_feedback) {
+      feedbackHtml = `
+        <div class="bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/90 dark:border-indigo-800/60 p-2 rounded-xl text-[10px] text-indigo-950 dark:text-indigo-200 space-y-0.5 shadow-2xs">
+          <div class="font-bold flex items-center gap-1 text-indigo-600 dark:text-indigo-400 text-[10px]">
+            <i class="fa-solid fa-robot"></i> Feedback de Hermes PM:
+          </div>
+          <p class="leading-relaxed text-[10.5px] italic">${escapeHtml(task.review_feedback)}</p>
+        </div>
+      `;
+    } else if (task.status === 'review') {
+      feedbackHtml = `
+        <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-1.5 rounded-lg text-[10px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5 font-medium animate-pulse">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <span>Hermes está realizando la revisión técnica y pruebas...</span>
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div class="flex items-start justify-between gap-1.5">
         <h4 class="font-medium text-xs text-slate-800 dark:text-slate-100 leading-snug">${escapeHtml(task.title)}</h4>
@@ -409,6 +428,7 @@ function renderProjects(projects, ws, tasks) {
       </div>
 
       ${blockerHtml}
+      ${feedbackHtml}
       
       <div class="flex items-center justify-between text-[11px] pt-0.5">
         <div class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">

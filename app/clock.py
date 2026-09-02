@@ -1,36 +1,202 @@
-import asyncio
+import os
 import json
-import random
 import time
+import asyncio
 from datetime import datetime, timedelta
-from typing import Set, Dict, Any, List
+from typing import Dict, Any, List, Set, Optional
 from app.db import get_db_connection
+
+def simulation_tick_workspaces(conn, sim_hours_worked: float):
+    now_iso = datetime.utcnow().isoformat()
+    workspaces = conn.execute("SELECT id FROM workspaces;").fetchall()
+    
+    for ws in workspaces:
+        ws_id = ws["id"]
+        
+        # 1. Backlog -> In Progress Activation (for available workers)
+        talents = conn.execute("SELECT id, name, role FROM talent_profiles WHERE workspace_id = ?;", (ws_id,)).fetchall()
+        for t in talents:
+            active_cnt = conn.execute("""
+                SELECT COUNT(*) as cnt FROM tasks 
+                WHERE workspace_id = ? AND status = 'in_progress' AND (assignee_id = ? OR assignee_name = ?);
+            """, (ws_id, t["id"], t["name"])).fetchone()["cnt"]
+            
+            if active_cnt == 0:
+                role_keyword = t["role"].split()[-1] if t["role"] else ""
+                task = conn.execute("""
+                    SELECT id, title FROM tasks 
+                    WHERE workspace_id = ? AND status = 'backlog' 
+                      AND (assignee_id = ? OR assignee_name = ? OR (assignee_name IS NULL AND role_required LIKE ?))
+                    ORDER BY CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, created_at ASC
+                    LIMIT 1;
+                """, (ws_id, t["id"], t["name"], f"%{role_keyword}%")).fetchone()
+                
+                if task:
+                    conn.execute("""
+                        UPDATE tasks 
+                        SET status = 'in_progress', assignee_id = ?, assignee_name = ?, updated_at = ?
+                        WHERE id = ?;
+                    """, (t["id"], t["name"], now_iso, task["id"]))
+                    conn.execute("""
+                        UPDATE talent_profiles
+                        SET availability_status = 'busy', current_task_id = ?
+                        WHERE id = ?;
+                    """, (task["id"], t["id"]))
+
+        # 2. Advance In-Progress tasks
+        if sim_hours_worked > 0:
+            in_progress_tasks = conn.execute("""
+                SELECT t.id, t.estimated_hours, t.completed_hours, p.productivity_factor
+                FROM tasks t
+                LEFT JOIN talent_profiles p ON t.assignee_id = p.id
+                WHERE t.workspace_id = ? AND t.status = 'in_progress' AND (t.blocker_reason IS NULL OR t.blocker_reason = '');
+            """, (ws_id,)).fetchall()
+
+            for task in in_progress_tasks:
+                factor = task["productivity_factor"] if task["productivity_factor"] else 1.0
+                delta_comp = sim_hours_worked * factor
+                new_comp = min(task["estimated_hours"], task["completed_hours"] + delta_comp)
+                
+                new_status = "review" if new_comp >= task["estimated_hours"] * 0.85 else "in_progress"
+
+                conn.execute("""
+                UPDATE tasks
+                SET completed_hours = ?, status = ?, updated_at = ?
+                WHERE id = ?;
+                """, (round(new_comp, 1), new_status, now_iso, task["id"]))
+
+        # 3. Autonomous Hermes Review & Feedback (Review -> Done + Follow-up generation)
+        review_tasks = conn.execute("""
+            SELECT id, title, role_required, estimated_hours, completed_hours, assignee_name, assignee_id, review_feedback
+            FROM tasks
+            WHERE workspace_id = ? AND status = 'review';
+        """, (ws_id,)).fetchall()
+
+        for task in review_tasks:
+            title_lower = task["title"].lower()
+            
+            if any(k in title_lower for k in ["scoring", "riesgo", "algoritmo"]):
+                feedback = "Hermes PM: Aprobado. Reglas de cálculo crediticio validadas contra matriz de riesgo y cobertura de tests al 94%."
+                followup_title = "Optimización de Caché en Redis para Scoring Crediticio"
+                followup_role = "Senior Fullstack Engineer"
+                followup_hours = 12.0
+            elif any(k in title_lower for k in ["react", "frontend", "kyc", "portal", "ui", "onboarding"]):
+                feedback = "Hermes PM: Aprobado. Interfaces responsivas y accesibles; flujo KYC validado sin fricciones en mobile y desktop."
+                followup_title = "Componentes de Alertas y Notificaciones en Vivo en React"
+                followup_role = "Junior Frontend Developer"
+                followup_hours = 10.0
+            elif any(k in title_lower for k in ["pago", "spei", "webhook", "stripe", "dispersión", "dispersion"]):
+                feedback = "Hermes PM: Aprobado. Webhooks y dispersión SPEI validados con idempotencia, manejo de reintentos y logs de auditoría."
+                followup_title = "Módulo de Conciliación Automática de Saldos y Reportes Financieros"
+                followup_role = "Mid Backend Developer"
+                followup_hours = 16.0
+            elif any(k in title_lower for k in ["docker", "ci/cd", "kubernetes", "cloud", "pipeline"]):
+                feedback = "Hermes PM: Aprobado. Pipeline CI/CD automatizado con escaneo de vulnerabilidades y despliegue reproducible en Kubernetes."
+                followup_title = "Monitoreo de Métricas y Alertas de Latencia con Prometheus"
+                followup_role = "DevOps & Cloud Engineer"
+                followup_hours = 12.0
+            elif any(k in title_lower for k in ["qa", "cypress", "prueba", "test", "e2e"]):
+                feedback = "Hermes PM: Aprobado. Suite de pruebas E2E ejecutada con éxito y matriz de cobertura validada para pase a producción."
+                followup_title = "Pruebas de Carga y Concurrencia de API con k6"
+                followup_role = "Senior QA Automation Engineer"
+                followup_hours = 14.0
+            else:
+                feedback = "Hermes PM: Aprobado. Criterios de aceptación cumplidos tras revisión técnica y pruebas de integración."
+                followup_title = None
+                followup_role = None
+                followup_hours = 0.0
+
+            # Complete task with feedback
+            conn.execute("""
+                UPDATE tasks 
+                SET status = 'done', completed_hours = estimated_hours, review_feedback = ?, updated_at = ?
+                WHERE id = ?;
+            """, (feedback, now_iso, task["id"]))
+
+            # Free the developer in talent_profiles
+            if task["assignee_id"]:
+                conn.execute("UPDATE talent_profiles SET availability_status = 'available', current_task_id = NULL WHERE id = ?;", (task["assignee_id"],))
+
+            # Insert Hermes review insight in inbox
+            inbox_id = f"inbox-{int(time.time()*1000)}-{task['id']}"
+            conn.execute("""
+                INSERT INTO hermes_inbox (id, workspace_id, type, title, body, read, sim_time, created_at)
+                VALUES (?, ?, 'insight', ?, ?, 0, 'Sprint 1', ?);
+            """, (
+                inbox_id,
+                ws_id,
+                f"Revisión Aprobada: {task['title']}",
+                f"Hermes ha revisado la entrega de {task['assignee_name'] or 'desarrollador'}.\n\nFeedback: {feedback}",
+                now_iso
+            ))
+
+            # Spawn follow-up task if applicable
+            if followup_title:
+                exists = conn.execute("SELECT id FROM tasks WHERE workspace_id = ? AND title = ?;", (ws_id, followup_title)).fetchone()
+                if not exists:
+                    new_tsk_id = f"tsk-auto-{int(time.time()*1000)}-{task['id']}"
+                    conn.execute("""
+                        INSERT INTO tasks (id, workspace_id, title, description, role_required, estimated_hours, completed_hours, status, assignee_id, assignee_name, priority, created_at, updated_at)
+                        VALUES (?, ?, ?, 'Tarea de mejora generada automáticamente por Hermes tras revisión de sprint.', ?, ?, 0.0, 'backlog', ?, ?, 'medium', ?, ?);
+                    """, (new_tsk_id, ws_id, followup_title, followup_role, followup_hours, task["assignee_id"], task["assignee_name"], now_iso, now_iso))
+
+        # 4. Recompute suggestions and burnout alerts directly on conn
+        talents_all = conn.execute("SELECT id, name, role FROM talent_profiles WHERE workspace_id = ?;", (ws_id,)).fetchall()
+        tasks_all = conn.execute("SELECT id, title, assignee_name, estimated_hours, completed_hours, status FROM tasks WHERE workspace_id = ?;", (ws_id,)).fetchall()
+        workload = {t["name"]: 0.0 for t in talents_all}
+        for task in tasks_all:
+            name = task["assignee_name"]
+            if name and name in workload and task["status"] != "done":
+                workload[name] += (task["estimated_hours"] - task["completed_hours"])
+        
+        for name, hrs in workload.items():
+            slug = name.lower().replace(' ', '-')
+            if hrs > 30.0:
+                s_id = f"sug-{ws_id}-overload-{slug}"
+                conn.execute("""
+                INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
+                VALUES (?, ?, 'workload', 'Riesgo de Sobrecarga (Burnout)', ?, 'Se sugiere reasignar tareas menores a desarrolladores con disponibilidad.', 'rebalance', ?, 'active', ?);
+                """, (s_id, ws_id, f"{name} tiene {hrs:.0f}h pendientes asignadas (límite saludable 30h).", json.dumps({"worker": name, "hours": hrs}), now_iso))
+
+                dec_id = f"dec-{ws_id}-rebalance-{slug}"
+                conn.execute("""
+                INSERT OR IGNORE INTO managerial_decisions (id, workspace_id, title, description, impact_summary, status, response_comment, created_at)
+                VALUES (?, ?, ?, ?, 'Reduce sobrecarga a nivel saludable (~24h) y evita retraso en la entrega del MVP.', 'pending', NULL, ?);
+                """, (
+                    dec_id, 
+                    ws_id, 
+                    f"Aprobación: Rebalanceo de Carga ({name})", 
+                    f"{name} acumula {hrs:.0f}h de trabajo pendiente en el sprint. Hermes propone reasignar tareas secundarias a perfiles disponibles para balancear la capacidad del equipo.",
+                    now_iso
+                ))
+            else:
+                conn.execute("UPDATE pm_suggestions SET status = 'dismissed' WHERE id = ? AND workspace_id = ? AND status = 'active';", (f"sug-{ws_id}-overload-{slug}", ws_id))
+
 
 class SimulationEngine:
     def __init__(self):
         self.active_listeners: Set[asyncio.Queue] = set()
         self.is_running = False
-        self._task: asyncio.Task = None
 
     def get_state(self) -> Dict[str, Any]:
         conn = get_db_connection()
         row = conn.execute("SELECT * FROM global_simulation WHERE id = 1;").fetchone()
         conn.close()
-        if row:
-            sim_dt = datetime.fromisoformat(row["current_sim_time"])
+        if not row:
             return {
-                "current_sim_time": row["current_sim_time"],
-                "formatted_time": sim_dt.strftime("%d %b %Y, %I:%M %p"),
-                "day_number": (sim_dt.date() - datetime(2030, 9, 12).date()).days + 1,
-                "hour": sim_dt.hour,
-                "minute": sim_dt.minute,
-                "speed_multiplier": row["speed_multiplier"],
-                "status": row["status"],
-                "active_events": json.loads(row["active_events"])
+                "current_sim_time": "2030-09-12T09:00:00",
+                "speed_multiplier": 0.0,
+                "status": "paused",
+                "active_events": []
             }
-        return {}
+        return {
+            "current_sim_time": row["current_sim_time"],
+            "speed_multiplier": row["speed_multiplier"],
+            "status": row["status"],
+            "active_events": json.loads(row["active_events"])
+        }
 
-    def set_speed(self, speed_multiplier: float, status: str = None) -> Dict[str, Any]:
+    def set_speed(self, speed_multiplier: float, status: Optional[str] = None) -> Dict[str, Any]:
         conn = get_db_connection()
         if status is None:
             status = "running" if speed_multiplier > 0 else "paused"
@@ -52,7 +218,6 @@ class SimulationEngine:
         if row:
             current_dt = datetime.fromisoformat(row["current_sim_time"])
             new_dt = current_dt + timedelta(days=days)
-            # Set to 09:00 AM on the new day
             new_dt = new_dt.replace(hour=9, minute=0, second=0)
             conn.execute("""
             UPDATE global_simulation
@@ -60,23 +225,7 @@ class SimulationEngine:
             WHERE id = 1;
             """, (new_dt.isoformat(), time.time()))
 
-            # Advance in_progress tasks by 8h per simulated day
-            sim_work_hours = 8.0 * days
-            in_progress_tasks = conn.execute("""
-                SELECT t.id, t.estimated_hours, t.completed_hours, p.productivity_factor
-                FROM tasks t
-                LEFT JOIN talent_profiles p ON t.assignee_id = p.id
-                WHERE t.status = 'in_progress' AND (t.blocker_reason IS NULL OR t.blocker_reason = '');
-            """).fetchall()
-
-            for task in in_progress_tasks:
-                factor = task["productivity_factor"] if task["productivity_factor"] else 1.0
-                delta = sim_work_hours * factor
-                new_comp = min(task["estimated_hours"], task["completed_hours"] + delta)
-                new_status = "done" if new_comp >= task["estimated_hours"] else ("review" if new_comp >= task["estimated_hours"] * 0.85 else "in_progress")
-                conn.execute("""
-                    UPDATE tasks SET completed_hours = ?, status = ?, updated_at = ? WHERE id = ?;
-                """, (round(new_comp, 1), new_status, datetime.utcnow().isoformat(), task["id"]))
+            simulation_tick_workspaces(conn, 8.0 * days)
 
             conn.commit()
         conn.close()
@@ -113,11 +262,9 @@ class SimulationEngine:
             "timestamp": datetime.utcnow().isoformat()
         }
         events.append(new_event)
-        # Keep last 5 events
         events = events[-5:]
         conn.execute("UPDATE global_simulation SET active_events = ? WHERE id = 1;", (json.dumps(events),))
         
-        # Also post a system message to all workspaces
         workspaces = conn.execute("SELECT id FROM workspaces;").fetchall()
         for ws in workspaces:
             conn.execute("""
@@ -168,7 +315,6 @@ class SimulationEngine:
                     continue
 
                 speed = row["speed_multiplier"]
-                # 1 real second = (speed * 60) simulated seconds
                 sim_delta_seconds = speed * 60
                 curr_dt = datetime.fromisoformat(row["current_sim_time"])
                 next_dt = curr_dt + timedelta(seconds=sim_delta_seconds)
@@ -179,32 +325,8 @@ class SimulationEngine:
                 WHERE id = 1;
                 """, (next_dt.isoformat(), time.time()))
 
-                # Continuous task progress simulation (working hours factor: ~1/3 of day is worked)
                 sim_hours_worked = (sim_delta_seconds / 3600.0) * 0.33
-                if sim_hours_worked > 0:
-                    in_progress_tasks = conn.execute("""
-                        SELECT t.id, t.estimated_hours, t.completed_hours, p.productivity_factor
-                        FROM tasks t
-                        LEFT JOIN talent_profiles p ON t.assignee_id = p.id
-                        WHERE t.status = 'in_progress' AND (t.blocker_reason IS NULL OR t.blocker_reason = '');
-                    """).fetchall()
-
-                    for task in in_progress_tasks:
-                        factor = task["productivity_factor"] if task["productivity_factor"] else 1.0
-                        delta_comp = sim_hours_worked * factor
-                        new_comp = min(task["estimated_hours"], task["completed_hours"] + delta_comp)
-                        
-                        new_status = "in_progress"
-                        if new_comp >= task["estimated_hours"]:
-                            new_status = "done"
-                        elif new_comp >= task["estimated_hours"] * 0.85:
-                            new_status = "review"
-
-                        conn.execute("""
-                        UPDATE tasks
-                        SET completed_hours = ?, status = ?, updated_at = ?
-                        WHERE id = ?;
-                        """, (round(new_comp, 1), new_status, datetime.utcnow().isoformat(), task["id"]))
+                simulation_tick_workspaces(conn, sim_hours_worked)
 
                 conn.commit()
                 conn.close()

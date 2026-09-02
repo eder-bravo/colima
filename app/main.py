@@ -293,6 +293,12 @@ async def apply_suggestion(workspace_id: str, suggestion_id: str):
         INSERT INTO managerial_decisions (id, workspace_id, title, description, impact_summary, status, response_comment, created_at)
         VALUES (?, ?, 'Aprobación: Contratación QA Automation', 'Incorporar especialista en testing automatizado para asegurar el pase a producción del MVP.', '+$3,800 USD / Reduce tasa de bugs en 80%', 'pending', NULL, ?);
         """, (dec_id, workspace_id, datetime.utcnow().isoformat()))
+    elif action_type == "rebalance":
+        dec_id = f"dec-{workspace_id}-rebalance-{int(time.time()*1000)}"
+        conn.execute("""
+        INSERT OR IGNORE INTO managerial_decisions (id, workspace_id, title, description, impact_summary, status, response_comment, created_at)
+        VALUES (?, ?, 'Aprobación: Rebalanceo de Carga de Sprint', 'Reasignar tareas secundarias a desarrolladores con disponibilidad para evitar cuellos de botella.', 'Reduce sobrecarga de trabajo y asegura la fecha objetivo del MVP.', 'pending', NULL, ?);
+        """, (dec_id, workspace_id, datetime.utcnow().isoformat()))
 
     conn.execute("UPDATE pm_suggestions SET status = 'applied' WHERE id = ? AND workspace_id = ?;", (suggestion_id, workspace_id))
     conn.commit()
@@ -418,13 +424,37 @@ class DecisionResponseRequest(BaseModel):
 @app.post("/api/workspaces/{workspace_id}/decisions/{decision_id}/respond")
 async def respond_decision(workspace_id: str, decision_id: str, req: DecisionResponseRequest):
     conn = get_db_connection()
+    now_iso = datetime.utcnow().isoformat()
     conn.execute("""
     UPDATE managerial_decisions
     SET status = ?, response_comment = ?
     WHERE id = ? AND workspace_id = ?;
     """, (req.status, req.comment, decision_id, workspace_id))
     
-    # Also add a message from Manager to the chat
+    # If approved and decision is a rebalance:
+    if req.status == "approved" and "rebalance" in decision_id.lower():
+        talents = conn.execute("SELECT id, name, role FROM talent_profiles WHERE workspace_id = ?;", (workspace_id,)).fetchall()
+        target_dev = None
+        for t in talents:
+            if "fullstack" in t["role"].lower() or "senior" in t["role"].lower() or "ana" in t["name"].lower():
+                target_dev = t
+                break
+        if not target_dev and talents:
+            target_dev = talents[0]
+
+        if target_dev:
+            pending_tasks = conn.execute("""
+                SELECT id, title, assignee_name FROM tasks 
+                WHERE workspace_id = ? AND status IN ('backlog', 'in_progress') AND (assignee_id != ? OR assignee_id IS NULL)
+                ORDER BY estimated_hours ASC LIMIT 2;
+            """, (workspace_id, target_dev["id"])).fetchall()
+
+            for tsk in pending_tasks:
+                conn.execute("""
+                    UPDATE tasks SET assignee_id = ?, assignee_name = ?, updated_at = ?
+                    WHERE id = ?;
+                """, (target_dev["id"], target_dev["name"], now_iso, tsk["id"]))
+
     action_label = "APROBADA ✅" if req.status == "approved" else "RECHAZADA ❌"
     conn.execute("""
     INSERT INTO chat_messages (id, workspace_id, sender, sender_name, content, message_type, metadata, created_at)
@@ -432,12 +462,18 @@ async def respond_decision(workspace_id: str, decision_id: str, req: DecisionRes
     """, (
         f"msg-gov-{int(datetime.utcnow().timestamp()*1000)}",
         workspace_id,
-        f"La solicitud gerencial ha sido **{action_label}** por la Dirección.\nComentario: {req.comment or 'Sin comentarios adicionales.'}",
-        datetime.utcnow().isoformat()
+        f"La solicitud gerencial ha sido **{action_label}** por la Dirección.\nComentario: {req.comment or 'Rebalanceo de carga ejecutado en el sprint.'}",
+        now_iso
     ))
 
     conn.commit()
     conn.close()
+    
+    try:
+        compute_pm_suggestions(workspace_id)
+    except Exception:
+        pass
+        
     return {"status": "ok"}
 
 class ChatRequest(BaseModel):

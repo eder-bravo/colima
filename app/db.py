@@ -10,9 +10,10 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "/app/data/colima.db")
 
 def get_db_connection() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
-    conn = sqlite3.connect(DATABASE_PATH, timeout=15.0)
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
@@ -156,6 +157,11 @@ def init_db():
     );
     """)
 
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN review_feedback TEXT;")
+    except Exception:
+        pass
+
     # Chat Messages
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -286,18 +292,32 @@ def compute_pm_suggestions(workspace_id: str):
         workload[t["name"]] = 0.0
     for task in tasks:
         name = task["assignee_name"]
-        if name and name in workload:
+        if name and name in workload and task["status"] != "done":
             workload[name] += (task["estimated_hours"] - task["completed_hours"])
             
     active_overloads = set()
     for name, hrs in workload.items():
         if hrs > 30.0:
-            s_id = f"sug-{workspace_id}-overload-{name.lower().replace(' ', '-')}"
+            slug = name.lower().replace(' ', '-')
+            s_id = f"sug-{workspace_id}-overload-{slug}"
             active_overloads.add(s_id)
             conn.execute("""
             INSERT OR IGNORE INTO pm_suggestions (id, workspace_id, category, title, description, recommendation, action_type, action_payload, status, created_at)
             VALUES (?, ?, 'workload', 'Riesgo de Sobrecarga (Burnout)', ?, 'Se sugiere reasignar tareas menores a desarrolladores con disponibilidad.', 'rebalance', ?, 'active', ?);
             """, (s_id, workspace_id, f"{name} tiene {hrs:.0f}h pendientes asignadas (límite saludable 30h).", json.dumps({"worker": name, "hours": hrs}), datetime.utcnow().isoformat()))
+
+            # Automatically create or keep active a pending managerial decision
+            dec_id = f"dec-{workspace_id}-rebalance-{slug}"
+            conn.execute("""
+            INSERT OR IGNORE INTO managerial_decisions (id, workspace_id, title, description, impact_summary, status, response_comment, created_at)
+            VALUES (?, ?, ?, ?, 'Reduce sobrecarga a nivel saludable (~24h) y evita retraso en la entrega del MVP.', 'pending', NULL, ?);
+            """, (
+                dec_id, 
+                workspace_id, 
+                f"Aprobación: Rebalanceo de Carga ({name})", 
+                f"{name} acumula {hrs:.0f}h de trabajo pendiente en el sprint. Hermes propone reasignar tareas secundarias a perfiles disponibles para balancear la capacidad del equipo.",
+                datetime.utcnow().isoformat()
+            ))
 
     # Dismiss overloads that no longer exist
     all_overload_sugs = conn.execute("SELECT id FROM pm_suggestions WHERE workspace_id = ? AND category = 'workload' AND status = 'active';", (workspace_id,)).fetchall()

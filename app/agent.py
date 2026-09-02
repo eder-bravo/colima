@@ -837,7 +837,41 @@ async def run_smart_fallback(workspace_id: str, user_message: str, system_prompt
             final_text = "\n".join(lines)
 
 
-    # 5. Rendimiento y carga de trabajo
+    # 5. Sobrecarga / Burnout / Opciones Estratégicas de Decisión
+    elif any(k in user_lower for k in ["burnout", "sobrecarga", "riesgo de sobrecarga", "recomiendas actuar", "qué opciones", "que opciones", "opciones tenemos", "carga excesiva"]):
+        final_text = (
+            "**Estrategia Recomendada de Hermes ante Riesgo de Sobrecarga (Burnout):**\n\n"
+            "1. **Opción A (Rebalanceo Inmediato):** Reasignar 1 o 2 tareas secundarias de Diego Torres a **Ana Morales** (Senior Fullstack, Factor 1.35x), quien cuenta con disponibilidad técnica inmediata.\n"
+            "2. **Opción B (Aprobación Gerencial):** Aprobar la solicitud pendiente en la pestaña **5. Sugerencias PM** para formalizar el rebalanceo automático del sprint con registro de auditoría.\n"
+            "3. **Opción C (Ajuste de Alcance / Descope):** Mover tareas no esenciales (como reportes y conciliaciones) al siguiente sprint para proteger la entrega del MVP a 30 días.\n\n"
+            "¿Deseas que ejecute el rebalanceo de tareas ahora mismo o prefieres aprobarlo desde la pestaña de Sugerencias?"
+        )
+
+    # 5.1 Ejecutar Rebalanceo / Aprobación
+    elif any(k in user_lower for k in ["reasigna", "rebalancea", "hazlo", "opción a", "opcion a", "transfiere", "aplica rebalanceo", "apruébalo", "aprueba"]):
+        target_name = "Ana Morales"
+        conn_temp = get_db_connection()
+        pending_tasks = conn_temp.execute("""
+            SELECT id, title, assignee_name FROM tasks 
+            WHERE workspace_id = ? AND status IN ('backlog', 'in_progress') AND assignee_name != ?
+            ORDER BY estimated_hours ASC LIMIT 2;
+        """, (workspace_id, target_name)).fetchall()
+        
+        reassigned_titles = []
+        now_str = datetime.utcnow().isoformat()
+        for tsk in pending_tasks:
+            conn_temp.execute("UPDATE tasks SET assignee_name = ?, updated_at = ? WHERE id = ?;", (target_name, now_str, tsk["id"]))
+            reassigned_titles.append(tsk["title"])
+            executed_tools.append({"tool": "reassign_task", "args": {"task_id": tsk["id"], "new_assignee_name": target_name, "reason": "Mitigación de sobrecarga / Burnout"}})
+        conn_temp.commit()
+        conn_temp.close()
+        
+        if reassigned_titles:
+            final_text = f"¡Rebalanceo ejecutado con éxito! He reasignado las siguientes tareas a **{target_name}**:\n• " + "\n• ".join(reassigned_titles) + "\n\nLa carga del equipo ahora se encuentra equilibrada y dentro de los límites saludables."
+        else:
+            final_text = "He verificado el tablero y las cargas se encuentran actualmente equilibradas. Seguiré monitoreando la capacidad del equipo."
+
+    # 5.2 Rendimiento y carga de trabajo
     elif any(k in user_lower for k in ["rendimiento", "carga", "workload", "capacidad", "horas"]):
         w_res = execute_tool(workspace_id, "get_team_workload", {})
         executed_tools.append({"tool": "get_team_workload", "args": {}})
