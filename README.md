@@ -6,6 +6,24 @@ El objetivo del proyecto es permitir a los participantes experimentar con la cre
 
 ---
 
+---
+
+## 📸 Capturas de la Aplicación
+
+### 1. Workspace Principal (Hermes PM, Tablero Kanban y Chat Autónomo)
+![Workspace Principal](docs/screenshots/01-workspace-kanban.png)
+
+### 2. Gestión de Equipo Técnico y ATS
+![Equipo Técnico y ATS](docs/screenshots/02-equipo-ats.png)
+
+### 3. Cronograma Gantt y Curva de Avance del Sprint
+![Cronograma Gantt](docs/screenshots/03-cronograma-gantt.png)
+
+### 4. Centro de Control del Instructor (Inyección de Caos y Simulador)
+![Panel de Instructor](docs/screenshots/04-panel-instructor.png)
+
+---
+
 ## 🌟 Características Principales
 
 1. **Agente Autónomo de PM (Hermes):**
