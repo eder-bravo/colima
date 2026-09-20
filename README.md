@@ -1,10 +1,23 @@
-# 🤖 Hermes PM — Taller de Asistentes PM Autónomos con IA (Colima)
+# 🤖 Hermes PM — Asistentes PM Autónomos con IA para la Gestión de Equipos de Software
 
-Este proyecto fue desarrollado como material didáctico y sandbox práctico para el **Taller de Asistentes PM Autónomos con IA** impartido en **Colima**.
-
-El objetivo del proyecto es permitir a los participantes experimentar con la creación, orquestación y evaluación de un asistente autónomo de gestión de proyectos (**Hermes PM**), combinando interfaces reactivas, simulación de tiempo acelerado y llamadas a herramientas (*tool-calling / ReAct loop*).
+> **Taller Oficial impartido en el marco del Congreso Internacional de la Red de Investigación Interinstitucional (CIREDII 2026)**  
+> **Fechas y Sede:** 02 al 04 de septiembre de 2026 • Colima, Col., México  
+> **Instructor:** Dr. Eder Jahir González Bravo  
+> **Instituciones Convocantes:** Red de Investigación Interinstitucional (RII) • Universidad de Colima • Tecnológico Nacional de México (campus Colima y Ciudad Guzmán) • Anglia Ruskin University • CECYTCOL
 
 ---
+
+Este repositorio contiene el paquete completo y entorno sandbox desarrollado para el taller de 5 horas titulado **«Asistentes PM autónomos con IA para la gestión de equipos de software»**.
+
+El proyecto permite a investigadores, docentes y desarrolladores experimentar con la creación y evaluación de un asistente autónomo de gestión ágil de proyectos (**Hermes PM**), combinando interfaces reactivas, simulación temporal acelerada, evaluación de talento técnico (ATS) y llamadas a herramientas cognitivas (*ReAct / tool-calling*).
+
+---
+
+## 🎖️ Reconocimiento Oficial del Taller
+
+<p align="center">
+  <img src="docs/reconocimiento-ciredii-2026.png" alt="Reconocimiento Oficial CIREDII 2026 - Dr. Eder Jahir González Bravo" width="780"/>
+</p>
 
 ---
 
@@ -133,6 +146,6 @@ colima/
 
 ## 👥 Créditos y Contexto
 
-- **Evento:** Taller de Asistentes PM Autónomos con IA — Colima.
-- **Autor / Instructor:** Éder Bravo ([@eder-bravo](https://github.com/eder-bravo)).
+- **Evento:** Congreso Internacional de la Red de Investigación Interinstitucional (CIREDII 2026) — Taller de Asistentes PM Autónomos con IA.
+- **Autor / Instructor:** Dr. Eder Jahir González Bravo ([@eder-bravo](https://github.com/eder-bravo)).
 - **Licencia:** MIT.
