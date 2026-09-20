@@ -5,34 +5,12 @@ services:
     build:
       context: .
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     environment:
-      APP_ENV: production
+      APP_ENV: local
       DATABASE_PATH: /app/data/colima.db
-      INSTRUCTOR_PIN_FILE: /run/secrets/instructor_pin
-      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
       SAMPLES_DIR: /app/app/static/samples
       TZ: America/Monterrey
     volumes:
-      - /srv/data/colima:/app/data
-      - /srv/secrets/colima-instructor-pin:/run/secrets/instructor_pin:ro
-      - /srv/secrets/colima-gemini-key:/run/secrets/gemini_api_key:ro
-    networks:
-      edge:
-        aliases:
-          - colima-web
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    security_opt:
-      - no-new-privileges:true
-    group_add:
-      - "25001"
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-
-networks:
-  edge:
-    external: true
+      - ./data:/app/data
